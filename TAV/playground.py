@@ -20,19 +20,25 @@ import TAV.tav_helpers as tavh
 from TAV.Subject import Subject
 from TAV.TavParticipant import TavParticipant
 import TAV.window_sizes as window_sizes
-import TAV.peri_saccade as ps
+import TAV.peri_saccade as peri_saccade
+import TAV.signal_detection as signal_detection
 
 pio.renderers.default = "browser"
 
 # %%
 #################################
-# compare different window sizes:
-statistics, _, _ = window_sizes.load_or_calc_performance()
+# Window Sizes
+subject_statistics, _, _ = window_sizes.load_or_calc()
 
 # %%
 #################################
 # Peri-Saccade Reog Activity
-subject_activities, _, _, _ = ps.calculate_or_load_peri_saccade_reog_activity()
+subject_activities, _, _, _ = peri_saccade.load_or_calc_reog()
+
+# %%
+# SDT for Saccade Onset
+subject_measures, subject_figures, mean_fig = signal_detection.load_or_calc_saccade_onset()
+
 
 # %%
 #################################
