@@ -70,35 +70,12 @@ def create_boolean_array(s: int, true_indices: np.ndarray) -> np.ndarray:
     return bool_array
 
 
-def match_events(is_gt: np.ndarray, is_pred: np.ndarray) -> np.ndarray:
-    """
-    Matches between Ground-Truth and Predicted events, such that there is minimal difference between the indices of
-    the matched events. Returns a 2D array where each row is a matching pair of indices, where the first column is the
-    GT index and the second column is the Predicted index.
-    See also here: https://stackoverflow.com/q/78484847/8543025
-
-    :param is_gt: boolean array indicating the occurrence of Ground-Truth events
-    :param is_pred: boolean array indicating the occurrence of Predicted events
-    :return: m×2 array of matched indices (0 <= m <= min(sum(is_gt), sum(is_pred))
-    """
-    gt_idxs = np.where(is_gt)[0]
-    pred_idxs = np.where(is_pred)[0]
-    diffs = abs(gt_idxs[:, None] - pred_idxs[None, :])
-    rowwise_argmin = np.stack([diffs.argmin(0), np.arange(diffs.shape[1])]).T
-    colwise_argmin = np.stack([np.arange(diffs.shape[0]), diffs.argmin(1)]).T
-    is_matching = (rowwise_argmin[:, None] == colwise_argmin).all(-1).any(1)
-    idxs = rowwise_argmin[is_matching]
-    matching_indices = np.stack([gt_idxs[idxs[:, 0]], pred_idxs[idxs[:, 1]]]).T
-    return matching_indices
-
-
 def get_output_subdir(analysis_file: str) -> str:
     subdir_name = analysis_file.replace(".py", "").replace("_", " ").title()
     subdir_path = os.path.join(OUTPUT_DIR, subdir_name)
     if not os.path.exists(subdir_path):
         os.makedirs(subdir_path, exist_ok=True)
     return subdir_path
-
 
 
 def save_figure(fig: go.Figure, output_dir: str, filename: str):
