@@ -21,10 +21,10 @@ WINDOW_SIZES = np.arange(1, 21)
 #####################
 
 
-def _true_positive_rate(gt_idxs, pred_idxs, half_window: int = 8, trial_idxs: np.ndarray = None):
+def _true_positive_count(gt_idxs, pred_idxs, half_window: int = 8, trial_idxs: np.ndarray = None) -> int:
     """
-    Calculates the hit rate: proportion of GT events that are correctly predicted by the model, meaning that the
-    prediction occurs within a window of size `2 * half_window + 1` centered around the GT event.
+    Calculates the number of positive events that are correctly predicted by the model, meaning that the prediction
+    occurs within a window of size `2 * half_window + 1` centered around the GT event.
     If `trial_idxs` is provided, only events (GT & Pred) that occur during a trial are considered.
 
     :param gt_idxs: sample indices where the Ground-Truth events occur
@@ -35,26 +35,20 @@ def _true_positive_rate(gt_idxs, pred_idxs, half_window: int = 8, trial_idxs: np
     """
     gt_idxs, pred_idxs = __verify_input(gt_idxs, pred_idxs, half_window, trial_idxs)
     windows_around_gt = np.array([np.arange(i - half_window, i + half_window + 1) for i in gt_idxs])
-    hit_count = np.sum(np.isin(pred_idxs, windows_around_gt))
+    hit_count = np.isin(windows_around_gt, pred_idxs).any(axis=1).sum()
+    return hit_count
+
+
+def _true_positive_rate(gt_idxs, pred_idxs, half_window: int = 8, trial_idxs: np.ndarray = None):
+    """ Calculates TP/P: the proportion of correct positive predictions out of all Ground-Truth positive events. """
+    hit_count = _true_positive_count(gt_idxs, pred_idxs, half_window, trial_idxs)
     return hit_count / len(gt_idxs)
 
 
 def _positive_predictive_value(gt_idxs, pred_idxs, half_window: int = 8, trial_idxs: np.ndarray = None):
-    """
-    Calculates the proportion of Predicted events that are correctly predicted by the model, meaning that the GT event
-    occurs within a window of size `2 * half_window + 1` centered around the predicted event.
-    If `trial_idxs` is provided, only events (GT & Pred) that occur during a trial are considered.
-
-    :param gt_idxs: sample indices where the Ground-Truth events occur
-    :param pred_idxs: sample indices where the Predicted events occur
-    :param half_window: half the size of the window around the prediction
-    :param trial_idxs: sample indices where the trials occur
-    :return: ppv: float in range [0, 1]
-    """
-    gt_idxs, pred_idxs = __verify_input(gt_idxs, pred_idxs, half_window, trial_idxs)
-    windows_around_pred = np.array([np.arange(i - half_window, i + half_window + 1) for i in pred_idxs])
-    pos_count = np.sum(np.isin(gt_idxs, windows_around_pred))
-    return pos_count / len(pred_idxs)
+    """ Calculates TP/PP: the proportion of correct positive predictions out of all positive predictions. """
+    hit_count = _true_positive_count(pred_idxs, gt_idxs, half_window, trial_idxs)
+    return hit_count / len(pred_idxs)
 
 
 def _false_alarm_rate(gt_idxs, pred_idxs, num_samples: int, half_window: int = 8, trial_idxs: np.ndarray = None):
