@@ -12,8 +12,6 @@ import plotly.io as pio
 import TAV.tav_helpers as tavh
 from TAV.Subject import Subject
 
-pio.renderers.default = "browser"
-
 _OUTPUT_DIR = tavh.get_output_subdir(os.path.basename(__file__))
 _FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.FIGURES_STR)
 

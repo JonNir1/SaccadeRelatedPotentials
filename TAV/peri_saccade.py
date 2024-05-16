@@ -1,5 +1,5 @@
 import os
-from typing import List, Tuple
+from typing import List
 
 import numpy as np
 import pandas as pd
@@ -7,12 +7,10 @@ import pickle as pkl
 from tqdm import tqdm
 import plotly.graph_objects as go
 import plotly.express as px
-from plotly.subplots import make_subplots
 import plotly.io as pio
 
 import TAV.tav_helpers as tavh
 from TAV.Subject import Subject
-
 
 _OUTPUT_DIR = tavh.get_output_subdir(os.path.basename(__file__))
 _FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.FIGURES_STR)
