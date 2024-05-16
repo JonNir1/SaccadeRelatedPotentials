@@ -28,7 +28,7 @@ IGNORE_ELECTRODES = {
 ###########################
 
 
-def calculate_or_load_peri_saccade_reog_activity():
+def calculate_or_load_reog_activity():
     os.makedirs(_LINE_FIGURES_DIR, exist_ok=True)
     os.makedirs(_ACTIVITY_FIGURES_DIR, exist_ok=True)
     try:
