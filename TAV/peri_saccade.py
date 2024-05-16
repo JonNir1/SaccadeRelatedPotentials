@@ -28,7 +28,7 @@ IGNORE_ELECTRODES = {
 ###########################
 
 
-def calculate_or_load_reog_activity():
+def load_or_calc_reog():
     os.makedirs(_LINE_FIGURES_DIR, exist_ok=True)
     os.makedirs(_ACTIVITY_FIGURES_DIR, exist_ok=True)
     try:
@@ -105,10 +105,10 @@ def calculate_peri_saccade_reog_activity(
 ) -> pd.DataFrame:
     events = {
         "saccade_onset": s.create_boolean_event_channel(
-            s.get_eye_tracking_event_indices("saccade_onset"), enforce_trials=True
+            s.get_eye_tracking_event_indices("saccade_onset", False), enforce_trials=True
         ),
         "saccade_offset": s.create_boolean_event_channel(
-            s.get_eye_tracking_event_indices("saccade_offset"), enforce_trials=True
+            s.get_eye_tracking_event_indices("saccade_offset", False), enforce_trials=True
         ),
     }
     channels = {

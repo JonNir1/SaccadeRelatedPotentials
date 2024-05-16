@@ -97,7 +97,7 @@ def __is_event_window(num_samples: int, is_event_idxs: np.ndarray, half_window: 
 
 
 def _measure_detection_performance(s: Subject, window_sizes: np.ndarray) -> pd.DataFrame:
-    saccade_onset_idxs = s.get_eye_tracking_event_indices('saccade_onset')
+    saccade_onset_idxs = s.get_eye_tracking_event_indices('saccade_onset', True)
     is_reog_saccade_onset_idxs = s.calculate_reog_saccade_onset_indices(filter_name='srp', snr=3.5, enforce_trials=True)
     stats = np.zeros((len(window_sizes), len(COLUMNS)))
     for j, ws in tqdm(enumerate(window_sizes), desc="\tWindow Sizes", leave=False):
@@ -170,7 +170,7 @@ def _create_mean_performance_figure(stats: List[pd.DataFrame]) -> go.Figure:
 ###########################
 
 
-def load_or_calc_performance():
+def load_or_calc():
     os.makedirs(_FIGURES_DIR, exist_ok=True)
     try:
         with open(os.path.join(_OUTPUT_DIR, "subject_stats.pkl"), 'rb') as f:

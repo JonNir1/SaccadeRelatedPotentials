@@ -84,19 +84,23 @@ class Subject:
             return self._eeg_no_eyemovements[self._channels_map[channel_name]]
         return self._eeg_no_blinks[self._channels_map[channel_name]]
 
-    def get_eye_tracking_event_indices(self, event: str) -> np.ndarray:
+    def get_eye_tracking_event_indices(self, event: str, enforce_trials: bool = True) -> np.ndarray:
         event = event.upper().replace(" ", "_")
         if event == "SACCADE_ONSET":
-            return self._saccade_onset_idxs
-        if event == "SACCADE_OFFSET":
-            return self._saccade_offset_idxs
-        if event == "ERP":
-            return self._erp_idxs
-        if event in {"FRP_SACCADE", "SACCADE_FRP"}:
-            return self._frp_saccade_idxs
-        if event in {"FRP_FIXATION", "FIXATION_FRP"}:
-            return self._frp_fixation_idxs
-        raise ValueError(f"Event '{event}' not recognized")
+            idxs = self._saccade_onset_idxs
+        elif event == "SACCADE_OFFSET":
+            idxs = self._saccade_offset_idxs
+        elif event == "ERP":
+            idxs = self._erp_idxs
+        elif event in {"FRP_SACCADE", "SACCADE_FRP"}:
+            idxs = self._frp_saccade_idxs
+        elif event in {"FRP_FIXATION", "FIXATION_FRP"}:
+            idxs = self._frp_fixation_idxs
+        else:
+            raise ValueError(f"Event '{event}' not recognized")
+        if enforce_trials:
+            idxs = idxs[np.isin(idxs, np.where(self._is_trial)[0])]
+        return idxs
 
     def calculate_reog_saccade_onset_indices(self,
                                              filter_name: str = 'srp',
