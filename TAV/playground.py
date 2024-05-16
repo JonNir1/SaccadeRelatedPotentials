@@ -38,7 +38,7 @@ subject_activities, _, _, _ = peri_saccade.load_or_calc_reog()
 # %%
 #################################
 # SDT for Saccade Onset
-subject_measures, subject_figures, mean_fig = signal_detection.load_or_calc_saccade_onset()
+subject_measures, _, _ = signal_detection.load_or_calc_saccade_onset()
 
 # %%
 #################################
