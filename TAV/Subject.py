@@ -129,15 +129,6 @@ class Subject:
             is_event &= self._is_trial
         return is_event
 
-    def get_eyetracking_event_channels(self, enforce_trials: bool = True) -> Dict[str, np.ndarray]:
-        return {
-            "ET_SACCADE_ONSET": self.create_boolean_event_channel(self._saccade_onset_idxs, enforce_trials),
-            "ET_SACCADE_OFFSET": self.create_boolean_event_channel(self._saccade_offset_idxs, enforce_trials),
-            "ERP_SACCADE_ONSET": self.create_boolean_event_channel(self._erp_idxs, enforce_trials),
-            "FRP_SACCADE_ONSET": self.create_boolean_event_channel(self._frp_saccade_idxs, enforce_trials),
-            "FRP_FIXATION_ONSET": self.create_boolean_event_channel(self._frp_fixation_idxs, enforce_trials)
-        }
-
     def get_saccade_feature_channel(
             self, feature: str, enforce_trials: bool = True
     ):
