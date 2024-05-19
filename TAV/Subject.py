@@ -138,6 +138,27 @@ class Subject:
             "FRP_FIXATION_ONSET": self.create_boolean_event_channel(self._frp_fixation_idxs, enforce_trials)
         }
 
+    def get_saccade_feature_channel(
+            self, feature: str, enforce_trials: bool = True
+    ):
+        feature = feature.lower().strip()
+        if feature == "azimuth":
+            col_name = "sac_angle"
+        elif feature == "amplitude":
+            col_name = "sac_amplitude"
+        elif feature in {"vmax", "peak_velocity"}:
+            col_name = "sac_vmax"
+        else:
+            raise ValueError(f"Feature '{feature}' not recognized")
+        saccade_onset_idxs = self.get_eye_tracking_event_indices("saccade onset", enforce_trials)
+        saccade_offset_idxs = self.get_eye_tracking_event_indices("saccade offset", enforce_trials)
+        channel = np.full(self.num_samples, np.nan, dtype=float)
+        for onset, offset in zip(saccade_onset_idxs, saccade_offset_idxs):
+            saccade_row = self._trial_data[self._trial_data["SacOnset"] == onset]
+            value = saccade_row[col_name].values[0]
+            channel[onset:offset] = value
+        return channel
+
     def plot_eyetracker_saccade_detection(self):
         # extract channels
         # TODO: add reog with butter/wavelet filters as well
