@@ -1,13 +1,19 @@
 import os
 
 import numpy as np
+import pandas as pd
 import plotly.graph_objects as go
 import scipy.signal as signal
 import pywt
 
 OUTPUT_DIR = os.path.join("results", "tav")
 FIGURES_STR = "Figures"
+EPOCHS_STR = "Epochs"
+SAMPLES_STR = "Samples"
+CHANNELS_STR = "Channels"
+EVENTS_STR = "Events"
 SAMPLING_FREQUENCY = 1024  # eeg sampling frequency
+
 SRP_FILTER = np.array([
     0.000e+00, -0.000e+00, -1.000e-04, -2.000e-04, -2.000e-04, -1.000e-04, 1.000e-04, 3.000e-04, 7.000e-04, 1.500e-03,
     2.800e-03, 5.000e-03, 8.000e-03, 1.140e-02, 1.510e-02, 1.880e-02, 2.170e-02, 2.410e-02, 2.670e-02, 2.720e-02,
@@ -68,6 +74,31 @@ def create_boolean_array(s: int, true_indices: np.ndarray) -> np.ndarray:
     bool_array = np.zeros(s, dtype=bool)
     bool_array[true_indices] = True
     return bool_array
+
+
+def extract_epochs(
+        channel: np.ndarray,
+        event_indices: np.ndarray,
+        n_samples_before: int = 250,
+        n_samples_after: int = 250,
+):
+    """ Extracts epochs from a channel given event indices. """
+    # pad the signal if the first or last event is too close to the edge
+    pad_before = np.maximum(n_samples_before - event_indices[0], 0)
+    pad_after = np.maximum(n_samples_after - (channel.size - event_indices[-1]), 0)
+    event_indices += pad_before
+    padded_channel = np.pad(channel, (pad_before, pad_after), constant_values=np.nan)
+    # extract epochs
+    start_indices = event_indices - n_samples_before
+    end_indices = event_indices + n_samples_after
+    epochs = np.array([padded_channel[start: end] for start, end in zip(start_indices, end_indices)])
+    # store as DataFrame
+    epochs = pd.DataFrame(
+        epochs, index=np.arange(epochs.shape[0]), columns=np.arange(-n_samples_before, n_samples_after)
+    )
+    epochs.index.name = EPOCHS_STR
+    epochs.columns.name = SAMPLES_STR
+    return epochs
 
 
 def get_output_subdir(analysis_file: str) -> str:
