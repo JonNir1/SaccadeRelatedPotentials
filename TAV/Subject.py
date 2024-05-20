@@ -86,21 +86,33 @@ class Subject:
 
     def get_eye_tracking_event_indices(self, event: str, enforce_trials: bool = True) -> np.ndarray:
         event = event.upper().replace(" ", "_")
-        if event == "SACCADE_ONSET":
-            idxs = self._saccade_onset_idxs
-        elif event == "SACCADE_OFFSET":
-            idxs = self._saccade_offset_idxs
-        elif event == "ERP":
+        if event in {"ERP"}:
             idxs = self._erp_idxs
-        elif event in {"FRP_SACCADE", "SACCADE_FRP"}:
+            if enforce_trials:
+                idxs = idxs[np.isin(idxs, np.where(self._is_trial)[0])]
+            return idxs
+        if event in {"FRP_SACCADE", "SACCADE_FRP"}:
             idxs = self._frp_saccade_idxs
-        elif event in {"FRP_FIXATION", "FIXATION_FRP"}:
+            if enforce_trials:
+                idxs = idxs[np.isin(idxs, np.where(self._is_trial)[0])]
+            return idxs
+        if event in {"FRP_FIXATION", "FIXATION_FRP"}:
             idxs = self._frp_fixation_idxs
-        else:
-            raise ValueError(f"Event '{event}' not recognized")
-        if enforce_trials:
-            idxs = idxs[np.isin(idxs, np.where(self._is_trial)[0])]
-        return idxs
+            if enforce_trials:
+                idxs = idxs[np.isin(idxs, np.where(self._is_trial)[0])]
+            return idxs
+        # make sure we return only the indices that are within trials, if enforce_trials is True
+        if event in {"SACCADE_ONSET"} and not enforce_trials:
+            return self._saccade_onset_idxs
+        if event in {"SACCADE_OFFSET"} and not enforce_trials:
+            return self._saccade_offset_idxs
+        if event in {"SACCADE_ONSET", "SACCADE_OFFSET"} and enforce_trials:
+            onset_idxs, offset_idxs = self._saccade_onset_idxs, self._saccade_offset_idxs
+            matched_idxs = np.vstack([onset_idxs, offset_idxs]).T
+            is_within_trial = np.isin(matched_idxs, np.where(self._is_trial)[0]).all(axis=1)
+            col = 0 if event == "SACCADE_ONSET" else 1
+            return matched_idxs[is_within_trial, col]
+        raise ValueError(f"Event '{event}' not recognized")
 
     def calculate_reog_saccade_onset_indices(self,
                                              filter_name: str = 'srp',
