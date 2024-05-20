@@ -129,7 +129,7 @@ class Subject:
             is_event &= self._is_trial
         return is_event
 
-    def get_saccade_feature_channel(
+    def get_saccade_feature(
             self, feature: str, enforce_trials: bool = True
     ):
         feature = feature.lower().strip()
@@ -142,13 +142,8 @@ class Subject:
         else:
             raise ValueError(f"Feature '{feature}' not recognized")
         saccade_onset_idxs = self.get_eye_tracking_event_indices("saccade onset", enforce_trials)
-        saccade_offset_idxs = self.get_eye_tracking_event_indices("saccade offset", enforce_trials)
-        channel = np.full(self.num_samples, np.nan, dtype=float)
-        for onset, offset in zip(saccade_onset_idxs, saccade_offset_idxs):
-            saccade_row = self._trial_data[self._trial_data["SacOnset"] == onset]
-            value = saccade_row[col_name].values[0]
-            channel[onset:offset] = value
-        return channel
+        saccade_rows = self._trial_data[np.isin(self._trial_data["SacOnset"], saccade_onset_idxs)]
+        return saccade_rows[col_name].values
 
     def plot_eyetracker_saccade_detection(self):
         # extract channels
