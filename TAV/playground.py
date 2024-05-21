@@ -15,37 +15,33 @@ import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
 
-import utils.visualization as vis
 import TAV.tav_helpers as tavh
 from TAV.Subject import Subject
-from TAV.TavParticipant import TavParticipant
-import TAV.window_sizes as window_sizes
-import TAV.peri_saccade as peri_saccade
-import TAV.signal_detection as signal_detection
 
 pio.renderers.default = "browser"
 
 # %%
 #################################
 # Window Sizes
+import TAV.window_sizes as window_sizes
 subject_statistics, _, _ = window_sizes.load_or_calc_saccade_onset()
 
 # %%
 #################################
 # SDT for Saccade Onset
+import TAV.signal_detection as signal_detection
 subject_measures, _, _ = signal_detection.load_or_calc_saccade_onset()
 
 # %%
 # Peri-Saccades
+import TAV.peri_saccade as peri_saccade
 subject_epochs, _, _ = peri_saccade.load_or_calc()
 
 # %%
 #################################
 # playground
-
-idx = 101
-s = Subject.load_or_make(idx, tavh.OUTPUT_DIR)
-
+import TAV.timing_differences as time_diffs
+diffs, _, _ = time_diffs.load_or_calc_saccade_timing_differences()
 
 # %%
 #################################
@@ -59,4 +55,3 @@ for idx in range(101, 111):
     num_erps = len(s._erp_idxs)
     num_erps_in_trials = sum(s.create_boolean_event_channel(s._erp_idxs, enforce_trials=True))
     print(f"Subject {idx}:\tERP onsets:\t{num_erps}\tIn Trials:\t{num_erps_in_trials}")
-
