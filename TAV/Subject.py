@@ -118,15 +118,17 @@ class Subject:
             return matched_idxs[is_within_trial, col]
         raise ValueError(f"Event '{event}' not recognized")
 
-    def calculate_reog_saccade_onset_indices(self,
-                                             filter_name: str = 'srp',
-                                             snr: float = 3.5,
-                                             enforce_trials: bool = True) -> np.ndarray:
-        """
-        Detects saccade onsets in the radial EOG channel using the specified filter and signal-to-noise ratio.
-        Returns an array of indices where saccade-onsets are detected from the radial EOG channel.
-        """
-        assert snr > 0, "Signal-to-noise ratio must be positive"
+    def calculate_reog_saccade_event_indices(
+            self, event_name: str, enforce_trials: bool = True, **kwargs
+    ) -> np.ndarray:
+        if event_name.lower().replace(" ", "_") == "saccade_onset":
+            filter_name = kwargs.get("filter_name", "srp")
+            snr = kwargs.get("snr", 3.5)
+        elif event_name.lower().replace(" ", "_") == "saccade_offset":
+            # TODO: implement saccade offset detection from REOG data
+            raise NotImplementedError("Saccade offset detection not yet implemented")
+        else:
+            raise ValueError(f"Event '{event_name}' not recognized")
         filtered = tavh.apply_filter(self._reog_channel, filter_name)
         min_peak_height = filtered.mean() + snr * filtered.std()
         peak_idxs, _ = sp.signal.find_peaks(filtered, height=min_peak_height)

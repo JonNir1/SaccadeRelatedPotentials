@@ -13,7 +13,6 @@ import TAV.tav_helpers as tavh
 from TAV.Subject import Subject
 
 _OUTPUT_DIR = tavh.get_output_subdir(os.path.basename(__file__))
-_FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.FIGURES_STR)
 
 COLUMNS = {'HR': "#1f78b4", 'PPV': "#2ca25f", 'FR': "#e41a1c", "Tav FR": "#fc8d62"}
 WINDOW_SIZES = np.arange(1, 21)
@@ -96,16 +95,18 @@ def __is_event_window(num_samples: int, is_event_idxs: np.ndarray, half_window: 
 ###########################
 
 
-def _measure_detection_performance(s: Subject, window_sizes: np.ndarray) -> pd.DataFrame:
-    saccade_onset_idxs = s.get_eye_tracking_event_indices('saccade_onset', True)
-    is_reog_saccade_onset_idxs = s.calculate_reog_saccade_onset_indices(filter_name='srp', snr=3.5, enforce_trials=True)
+def _measure_detection_performance(s: Subject, event_name: str, window_sizes: np.ndarray) -> pd.DataFrame:
+    et_event_idxs = s.get_eye_tracking_event_indices(event_name, True)
+    reog_event_idxs = s.calculate_reog_saccade_event_indices(
+        event_name, filter_name='srp', snr=3.5, enforce_trials=True
+    )
     stats = np.zeros((len(window_sizes), len(COLUMNS)))
     for j, ws in tqdm(enumerate(window_sizes), desc="\tWindow Sizes", leave=False):
-        tpr = _true_positive_rate(saccade_onset_idxs, is_reog_saccade_onset_idxs, half_window=ws)
-        ppv = _positive_predictive_value(saccade_onset_idxs, is_reog_saccade_onset_idxs, half_window=ws)
-        fr = _false_alarm_rate(saccade_onset_idxs, is_reog_saccade_onset_idxs, s.num_samples, half_window=ws,
+        tpr = _true_positive_rate(et_event_idxs, reog_event_idxs, half_window=ws)
+        ppv = _positive_predictive_value(et_event_idxs, reog_event_idxs, half_window=ws)
+        fr = _false_alarm_rate(et_event_idxs, reog_event_idxs, s.num_samples, half_window=ws,
                                trial_idxs=np.where(s.get_is_trial_channel())[0])
-        tav_fr = _false_alarm_rate(saccade_onset_idxs, is_reog_saccade_onset_idxs, s.num_samples, half_window=ws)
+        tav_fr = _false_alarm_rate(et_event_idxs, reog_event_idxs, s.num_samples, half_window=ws)
         stats[j] = [tpr, ppv, fr, tav_fr]
     stats = pd.DataFrame(stats, columns=list(COLUMNS.keys()))
     return stats
@@ -144,8 +145,10 @@ def _create_mean_performance_figure(stats: List[pd.DataFrame]) -> go.Figure:
                 x=window_sizes,
                 y=np.mean([s[col] for s in stats], axis=0),
                 error_y=dict(type='data', array=np.std([s[col] for s in stats], axis=0)),
-                mode='lines+markers',
                 name=col,
+                legendgroup=col,
+                showlegend=True,
+                mode='lines+markers',
                 marker=dict(color=color)
             )
         )
@@ -155,8 +158,10 @@ def _create_mean_performance_figure(stats: List[pd.DataFrame]) -> go.Figure:
                 trace=go.Scatter(
                     x=window_sizes,
                     y=stat[col],
-                    mode='lines',
+                    name=col,
+                    legendgroup=col,
                     showlegend=False,
+                    mode='lines',
                     line=dict(color=color, width=0.2)
                 )
             )
@@ -170,34 +175,37 @@ def _create_mean_performance_figure(stats: List[pd.DataFrame]) -> go.Figure:
 ###########################
 
 
-def load_or_calc():
-    os.makedirs(_FIGURES_DIR, exist_ok=True)
+def load_or_calc_saccade_onset():
+    event_name = "saccade_onset"
+    event_dir = os.path.join(_OUTPUT_DIR, event_name)
+    event_figures_dir = os.path.join(event_dir, tavh.FIGURES_STR)
+    os.makedirs(event_figures_dir, exist_ok=True)
     try:
-        with open(os.path.join(_OUTPUT_DIR, "subject_stats.pkl"), 'rb') as f:
+        with open(os.path.join(event_dir, "subject_stats.pkl"), 'rb') as f:
             subject_stats = pkl.load(f)
     except FileNotFoundError:
         subject_stats = {}
         for i in tqdm(range(101, 111), desc="Subjects"):
             s = Subject.load_or_make(i)
-            stats = _measure_detection_performance(s, WINDOW_SIZES)
+            stats = _measure_detection_performance(s, event_name, WINDOW_SIZES)
             subject_stats[s.idx] = stats
-        with open(os.path.join(_OUTPUT_DIR, "subject_stats.pkl"), 'wb') as f:
+        with open(os.path.join(event_dir, "subject_stats.pkl"), 'wb') as f:
             pkl.dump(subject_stats, f)
     try:
-        with open(os.path.join(_FIGURES_DIR, "subject_figs.pkl"), 'rb') as f:
+        with open(os.path.join(event_figures_dir, "subject_figs.pkl"), 'rb') as f:
             subject_figs = pkl.load(f)
     except FileNotFoundError:
         subject_figs = {}
         for idx, stats in tqdm(subject_stats.items(), desc="Subject Figures"):
             fig = _create_subject_perf_figure(stats, idx)
-            tavh.save_figure(fig, _FIGURES_DIR, f"subject_{idx}_statistics")
+            tavh.save_figure(fig, event_figures_dir, f"subject_{idx}_statistics")
             subject_figs[idx] = fig
-        with open(os.path.join(_FIGURES_DIR, "subject_figs.pkl"), 'wb') as f:
+        with open(os.path.join(event_figures_dir, "subject_figs.pkl"), 'wb') as f:
             pkl.dump(subject_figs, f)
     try:
-        with open(os.path.join(_FIGURES_DIR, "mean_fig.json"), 'rb') as f:
+        with open(os.path.join(event_figures_dir, "mean_fig.json"), 'rb') as f:
             mean_fig = pio.read_json(f)
     except FileNotFoundError:
         mean_fig = _create_mean_performance_figure(list(subject_stats.values()))
-        tavh.save_figure(mean_fig, _FIGURES_DIR, "mean_fig")
+        tavh.save_figure(mean_fig, event_figures_dir, "mean_fig")
     return subject_stats, subject_figs, mean_fig

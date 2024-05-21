@@ -37,7 +37,7 @@ def load_or_calc_saccade_onset():
                 measures[idx] = pkl.load(f)
         except FileNotFoundError:
             s = Subject.load_or_make(idx, tavh.OUTPUT_DIR)
-            measures[idx] = saccade_onset_detection_measures(s, WINDOW_SIZES)
+            measures[idx] = saccade_event_detection_measures(s, event_name, WINDOW_SIZES)
             with open(stats_file_path, "wb") as f:
                 pkl.dump(measures[idx], f)
         # load subject fig
@@ -57,10 +57,12 @@ def load_or_calc_saccade_onset():
     return measures, subject_figures, mean_fig
 
 
-def saccade_onset_detection_measures(s: Subject, window_sizes: np.ndarray):
+def saccade_event_detection_measures(
+        s: Subject, event_name: str, window_sizes: np.ndarray, enforce_trials: bool = True
+) -> pd.DataFrame:
     """
-    Calculates Signal Detection Theory measures for Saccade Onset detection using Eye-Tracking and REOG data.
-    Returns a DataFrame with the calculated measures for each of the specified window sizes.
+    Calculates Signal Detection Theory measures for Saccade Event (onset/offset) detection using Eye-Tracking and REOG
+    data. Returns a DataFrame with the calculated measures for each of the specified window sizes.
     Calculated measures include:
         - P: number of positive events in the Ground-Truth
         - N: number of negative events in the Ground-Truth
@@ -74,14 +76,18 @@ def saccade_onset_detection_measures(s: Subject, window_sizes: np.ndarray):
         - beta: Response Bias
         - c: Decision Criterion
     """
+    # match ET detected events with REOG detected events
+    et_event_idxs = s.get_eye_tracking_event_indices(event_name, False)
+    et_event_channel = s.create_boolean_event_channel(et_event_idxs, enforce_trials)
+    reog_event_idxs = s.calculate_reog_saccade_event_indices(
+        event_name=event_name, filter_name='srp', snr=3.5, enforce_trials=False
+    )
+    reog_event_channel = s.create_boolean_event_channel(reog_event_idxs, enforce_trials)
+    P = et_event_channel.sum()      # number of GT positive events
+    PP = reog_event_channel.sum()   # number of Predicted positive events
+    all_matched_idxs = _match_events(et_event_channel, reog_event_channel)
+    # calculate measures for each window size
     num_trial_idxs = sum(s.get_is_trial_channel())
-    et_onset_idxs = s.get_eye_tracking_event_indices('saccade_onset', False)
-    et_onset_channel = s.create_boolean_event_channel(et_onset_idxs, enforce_trials=True)
-    reog_onset_idxs = s.calculate_reog_saccade_onset_indices(filter_name='srp', snr=3.5, enforce_trials=False)
-    reog_onset_channel = s.create_boolean_event_channel(reog_onset_idxs, enforce_trials=True)
-    P = et_onset_channel.sum()      # number of GT positive events
-    PP = reog_onset_channel.sum()   # number of Predicted positive events
-    all_matched_idxs = _match_events(et_onset_channel, reog_onset_channel)
     measures = {}
     for ws in window_sizes:
         double_window = 2 * ws + 1  # window size on both sides of the event
@@ -160,9 +166,11 @@ def _create_mean_measures_figure(stats: List[pd.DataFrame]) -> go.Figure:
                 x=window_sizes,
                 y=np.mean([s[column] for s in stats], axis=0),
                 error_y=dict(type='data', array=np.std([s[column] for s in stats], axis=0)),
-                mode='lines+markers',
                 name=column,
-                marker=dict(color=color)
+                legendgroup=column,
+                showlegend=True,
+                mode='lines+markers',
+                marker=dict(color=color),
             )
         )
         for stat in stats:
@@ -172,9 +180,11 @@ def _create_mean_measures_figure(stats: List[pd.DataFrame]) -> go.Figure:
                 trace=go.Scatter(
                     x=window_sizes,
                     y=stat[column],
-                    mode='lines',
+                    name=column,
+                    legendgroup=column,
                     showlegend=False,
-                    line=dict(color=color, width=0.2)
+                    mode='lines',
+                    line=dict(color=color, width=0.2),
                 )
             )
     mean_fig.update_layout(

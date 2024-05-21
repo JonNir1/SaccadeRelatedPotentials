@@ -28,7 +28,7 @@ pio.renderers.default = "browser"
 # %%
 #################################
 # Window Sizes
-subject_statistics, _, _ = window_sizes.load_or_calc()
+subject_statistics, _, _ = window_sizes.load_or_calc_saccade_onset()
 
 # %%
 #################################
