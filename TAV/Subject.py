@@ -62,6 +62,10 @@ class Subject:
         return self._num_samples
 
     @property
+    def eeg_channels(self) -> Dict[str, int]:
+        return {k: v for k, v in self._channels_map.items() if len(k) <= 3}
+
+    @property
     def pickle_name(self) -> str:
         return f"Subject_{self.idx}.pkl"
 
