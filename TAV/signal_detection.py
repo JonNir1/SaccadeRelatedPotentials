@@ -85,7 +85,7 @@ def saccade_event_detection_measures(
     reog_event_channel = s.create_boolean_event_channel(reog_event_idxs, enforce_trials)
     P = et_event_channel.sum()      # number of GT positive events
     PP = reog_event_channel.sum()   # number of Predicted positive events
-    all_matched_idxs = _match_events(et_event_channel, reog_event_channel)
+    all_matched_idxs = tavh.match_boolean_events(et_event_channel, reog_event_channel)
     # calculate measures for each window size
     num_trial_idxs = sum(s.get_is_trial_channel())
     measures = {}
@@ -193,29 +193,6 @@ def _create_mean_measures_figure(stats: List[pd.DataFrame]) -> go.Figure:
         showlegend=True
     )
     return mean_fig
-
-
-def _match_events(is_gt: np.ndarray, is_pred: np.ndarray) -> np.ndarray:
-    """
-    Matches between Ground-Truth and Predicted events, such that there is minimal difference between the indices of
-    the matched events. Returns a 2D array where each row is a matching pair of indices, where the first column is the
-    GT index and the second column is the Predicted index.
-    See also here: https://stackoverflow.com/q/78484847/8543025
-
-    :param is_gt: boolean array indicating the occurrence of Ground-Truth events
-    :param is_pred: boolean array indicating the occurrence of Predicted events
-    :return: m×2 array of matched indices (0 <= m <= min(sum(is_gt), sum(is_pred))
-    """
-    assert is_gt.shape == is_pred.shape, "Ground-Truth and Predicted arrays must have the same shape"
-    gt_idxs = np.where(is_gt)[0]
-    pred_idxs = np.where(is_pred)[0]
-    diffs = abs(gt_idxs[:, None] - pred_idxs[None, :])
-    rowwise_argmin = np.stack([diffs.argmin(0), np.arange(diffs.shape[1])]).T
-    colwise_argmin = np.stack([np.arange(diffs.shape[0]), diffs.argmin(1)]).T
-    is_matching = (rowwise_argmin[:, None] == colwise_argmin).all(-1).any(1)
-    idxs = rowwise_argmin[is_matching]
-    matching_indices = np.stack([gt_idxs[idxs[:, 0]], pred_idxs[idxs[:, 1]]]).T
-    return matching_indices
 
 
 def __calc_rate(true_count: int, detected_count: int) -> float:
