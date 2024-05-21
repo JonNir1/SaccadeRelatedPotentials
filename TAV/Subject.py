@@ -80,7 +80,7 @@ class Subject:
     def get_is_trial_channel(self) -> np.ndarray:
         return self._is_trial
 
-    def get_eeg_channel(self, channel_name: str, full_ica: bool = False) -> np.ndarray:
+    def get_channel(self, channel_name: str, full_ica: bool = False) -> np.ndarray:
         channel_name = channel_name.upper().strip()
         if channel_name == "REOG":
             return self._reog_channel
