@@ -138,4 +138,4 @@ def get_output_subdir(analysis_file: str) -> str:
 
 def save_figure(fig: go.Figure, output_dir: str, filename: str):
     fig.write_html(os.path.join(output_dir, f"{filename}.html"))
-    fig.write_json(os.path.join(output_dir, f"{filename}.json"))
+    # fig.write_json(os.path.join(output_dir, f"{filename}.json"))  # TODO: un/comment when needed
