@@ -1,11 +1,13 @@
 import os
-from typing import List
+import re
+import pickle as pkl
+from typing import List, Dict
 
 import numpy as np
 import pandas as pd
-import pickle as pkl
 from tqdm import tqdm
 import plotly.graph_objects as go
+from plotly.subplots import make_subplots
 import plotly.express as px
 import plotly.io as pio
 
@@ -14,208 +16,423 @@ from TAV.Subject import Subject
 
 _OUTPUT_DIR = tavh.get_output_subdir(os.path.basename(__file__))
 _FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.FIGURES_STR)
-_LINE_FIGURES_DIR = os.path.join(_FIGURES_DIR, "lines")
-_ACTIVITY_FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.FIGURES_STR, "offset_activity")
+
+_FOCUS_CHANNELS = ["REOG", "REOG_FILTERED", "F4 - F3", "F6 - F5", "F8 - F7", "FC6 - FC5", "FT8 - FT7", "T8 - T7"]
+_EPOCH_SAMPLES_BEFORE, _EPOCH_SAMPLES_AFTER = 250, 250
 _DEFAULT_COLORMAP = px.colors.qualitative.Dark24
 
-_SAMPLES_BEFORE, _SAMPLES_AFTER = 250, 250
-ELECTRODES = {"F4": "#5aae61", "FC4": "#1b7837", "O2": "#00441b"}
-IGNORE_ELECTRODES = {
-    'LHEOG', 'RHEOG', 'RVEOGS', 'RVEOGI', 'M1', 'M2', 'LVEOGI', 'ANA1', 'ANA2', 'ANA3', 'ANA4', 'ANA5', 'ANA6', 'ANA7',
-    'ANA8', 'PHOTODIODE', 'RESPONSEBOX'
-}
 
-###########################
+def load_or_calc(calc_mean: bool = True):
+    os.makedirs(_FIGURES_DIR, exist_ok=True)
+    subject_epochs, subject_is_rightwards = {}, {}
+    subject_figures = {}
+    for i in tqdm(range(101, 111), desc="Subjects"):
+        s = Subject.load_or_make(i, tavh.OUTPUT_DIR)
+        subject_epochs[s.idx] = load_or_calc_epochs(s)
+        azimuth = s.get_saccade_feature("azimuth", enforce_trials=True)
+        subject_is_rightwards[s.idx] = (-90 <= azimuth) & (azimuth < 90)
+        subject_figures[s.idx] = load_or_create_subject_figures(
+            s.idx, subject_epochs[s.idx], subject_is_rightwards[s.idx]
+        )
+    if not calc_mean:
+        return subject_epochs, subject_figures, None
+    mean_event_figures = create_mean_subject_event_figures(subject_epochs, subject_is_rightwards)
+    mean_channel_figures = create_mean_subject_channel_figures(subject_epochs, subject_is_rightwards)
+    mean_figures = {
+        event_name: {"all_channels": mean_event_figures[event_name], **mean_channel_figures[event_name]}
+        for event_name in mean_event_figures.keys()
+    }
+    return subject_epochs, subject_figures, mean_figures
 
 
-def load_or_calc_reog():
-    os.makedirs(_LINE_FIGURES_DIR, exist_ok=True)
-    os.makedirs(_ACTIVITY_FIGURES_DIR, exist_ok=True)
+def load_or_calc_epochs(s: Subject) -> pd.DataFrame:
+    os.makedirs(_OUTPUT_DIR, exist_ok=True)
+    fname = f"s{s.idx}_{tavh.EPOCHS_STR.lower()}"
     try:
-        with open(os.path.join(_OUTPUT_DIR, "peri_saccade_reog_activity.pkl"), "rb") as f:
-            subject_activities = pkl.load(f)
+        with open(os.path.join(_OUTPUT_DIR, f"{fname}.pkl"), "rb") as f:
+            return pkl.load(f)
     except FileNotFoundError:
-        subject_activities = {}
-        for i in tqdm(range(101, 111), desc="Subjects"):
-            s = Subject.load_or_make(i, tavh.OUTPUT_DIR)
-            activity = calculate_peri_saccade_reog_activity(s)
-            subject_activities[i] = activity
-        with open(os.path.join(_OUTPUT_DIR, "peri_saccade_reog_activity.pkl"), "wb") as f:
-            pkl.dump(subject_activities, f)
-
-    try:
-        with open(os.path.join(_LINE_FIGURES_DIR, "reog_figures.pkl"), "rb") as f:
-            subject_figures = pkl.load(f)
-    except FileNotFoundError:
-        subject_figures = {}
-        for idx, activity in tqdm(subject_activities.items(), desc="Subject Figures"):
-            figs = {}
-            for evt in activity.columns:
-                line_fig = _peri_event_line_figure(activity[evt], f"Subject {idx}", show_error=False)
-                tavh.save_figure(line_fig, _LINE_FIGURES_DIR, f"{evt}_subject_{idx}")
-                figs[evt] = line_fig
-            subject_figures[idx] = figs
-        with open(os.path.join(_LINE_FIGURES_DIR, "reog_figures.pkl"), "wb") as f:
-            pkl.dump(subject_figures, f)
-
-    subj_activity = subject_activities[101]  # example subject
-    try:
-        mean_figs = {}
-        for evnt in subj_activity.columns:
-            with open(os.path.join(_LINE_FIGURES_DIR, f"{evnt}_mean_subject.json"), 'rb') as f:
-                mean_figs[evnt] = pio.read_json(f)
-    except FileNotFoundError:
-        mean_figs = {}
-        for evnt in subj_activity.columns:
-            event_data = {}
-            for ch_name in subj_activity.index:
-                event_data[ch_name] = pd.concat([
-                    subj_act[evnt][ch_name] for subj_act in subject_activities.values()
-                ])
-            event_data = pd.Series(event_data)
-            event_data.name = evnt
-            event_fig = _peri_event_line_figure(event_data, "Mean Subject", show_error=False)
-            tavh.save_figure(event_fig, _LINE_FIGURES_DIR, f"{evnt}_mean_subject")
-            mean_figs[evnt] = event_fig
-
-    try:
-        with open(os.path.join(_ACTIVITY_FIGURES_DIR, "reog_figures.pkl"), "rb") as f:
-            offset_activity_figs = pkl.load(f)
-    except FileNotFoundError:
-        offset_activity_figs = {}
-        channel, evt = "reog", "saccade_offset"
-        for idx in tqdm(subject_activities.keys(), desc="Offset Activity Figures"):
-            offset_activity = subject_activities[idx].loc[channel, evt]
-            activity_fig = _peri_event_image(
-                offset_activity,
-                f"Peri-{evt.replace('_', ' ').title()}<br><sup>Subject: {idx}  Channel: {channel.upper()}</sup>",
-                vlines=[-50],
+        epochs = {}
+        for event_name in {"saccade onset", "saccade offset"}:
+            epochs[event_name] = _calculate_event_epochs(
+                s, event_name, _EPOCH_SAMPLES_BEFORE, _EPOCH_SAMPLES_AFTER, True
             )
-            tavh.save_figure(activity_fig, _ACTIVITY_FIGURES_DIR, f"{channel}_{evt}_subject_{idx}")
-            offset_activity_figs[idx] = activity_fig
-        with open(os.path.join(_ACTIVITY_FIGURES_DIR, "reog_figures.pkl"), "wb") as f:
-            pkl.dump(offset_activity_figs, f)
-    return subject_activities, subject_figures, mean_figs, offset_activity_figs
+        # store as DataFrame
+        epochs = pd.DataFrame(epochs)
+        epochs.index.name = tavh.CHANNELS_STR
+        epochs.columns.name = tavh.EVENTS_STR
+        with open(os.path.join(_OUTPUT_DIR, f"{fname}.pkl"), "wb") as f:
+            pkl.dump(epochs, f)
+        return epochs
 
 
-def calculate_peri_saccade_reog_activity(
-        s: Subject,
-        n_samples_before: int = _SAMPLES_BEFORE,
-        n_samples_after: int = _SAMPLES_AFTER,
-) -> pd.DataFrame:
-    events = {
-        "saccade_onset": s.create_boolean_event_channel(
-            s.get_eye_tracking_event_indices("saccade_onset", False), enforce_trials=True
-        ),
-        "saccade_offset": s.create_boolean_event_channel(
-            s.get_eye_tracking_event_indices("saccade_offset", False), enforce_trials=True
-        ),
-    }
-    channels = {
-        "reog": s.get_eeg_channel('reog'),
-        "reog_filtered": tavh.apply_filter(s.get_eeg_channel('reog'), 'srp'),
-    }
-    results = {}
-    for event, is_event in events.items():
-        event_results = {}
-        for ch_name, data in channels.items():
-            peri_activity = _peri_event_activity(is_event, data, n_samples_before, n_samples_after)
-            event_results[ch_name] = peri_activity
-        event_results = pd.Series(event_results)
-        event_results.name = event
-        results[event] = event_results
-    results = pd.DataFrame(results)  # events as columns, channels as rows
-    return results
+def load_or_create_subject_figures(
+        subj_idx: int,
+        epochs: pd.DataFrame,
+        is_rightward: np.ndarray,
+) -> Dict[str, go.Figure]:
+    subj_dir = os.path.join(_FIGURES_DIR, f"s{subj_idx}")
+    os.makedirs(subj_dir, exist_ok=True)
+    figures = {}
+    for event_name in epochs.columns:
+        try:
+            with open(os.path.join(subj_dir, f"{event_name}_all_channels.json"), "rb") as f:
+                figures[event_name] = pio.read_json(f)
+        except FileNotFoundError:
+            fig = _create_event_figure(epochs[event_name], is_rightward, f"Subject {subj_idx} - {event_name}")
+            tavh.save_figure(fig, subj_dir, f"{event_name}_all_channels")
+            figures[event_name] = fig
+
+        for focus_channel in _FOCUS_CHANNELS:
+            try:
+                with open(os.path.join(subj_dir, f"{event_name}_{focus_channel}.json"), "rb") as f:
+                    figures[f"{event_name}_{focus_channel}"] = pio.read_json(f)
+            except FileNotFoundError:
+                channel_data = epochs.loc[focus_channel, event_name]
+                if channel_data is None or np.isnan(channel_data).all().all() or channel_data.empty:
+                    continue
+                fig = _create_channel_figure(
+                    channel_data, is_rightward, focus_channel, f"Subject {subj_idx} - {event_name} - {focus_channel}"
+                )
+                tavh.save_figure(fig, subj_dir, f"{event_name}_{focus_channel}")
+                figures[f"{event_name}_{focus_channel}"] = fig
+    return figures
 
 
-def _peri_event_activity(
-        is_event: np.ndarray,
-        channel: np.ndarray,
-        n_samples_before: int,
-        n_samples_after: int,
-) -> pd.DataFrame:
-    assert is_event.size == channel.size, "`is_event` and `channel` must have the same size"
-    is_event_idxs = np.where(is_event)[0]
-    # pad the signal if the first or last event is too close to the edge
-    pad_before = np.maximum(n_samples_before - is_event_idxs[0], 0)
-    pad_after = np.maximum(n_samples_after - (channel.size - is_event_idxs[-1]), 0)
-    channel = np.pad(channel, (pad_before, pad_after))
-    is_event_idxs += pad_before
-    # extract peri-event activity
-    start_idxs = np.maximum(is_event_idxs - n_samples_before, 0)
-    end_idxs = np.minimum(is_event_idxs + n_samples_after, channel.size)
-    peri_event_idxs = np.array([np.arange(start, end) for start, end in zip(start_idxs, end_idxs)])
-    data = channel[peri_event_idxs]
-    result = pd.DataFrame(data, columns=np.arange(-n_samples_before, n_samples_after))
-    result.columns.name = "Sample"
-    result.index.name = "Event Number"
-    return result
-
-
-###########################
-
-
-def _peri_event_line_figure(
-        data: pd.Series,
-        subject_str: str,
+def create_mean_subject_event_figures(
+        subject_epochs: Dict[int, pd.DataFrame],
+        subject_is_rightwards: Dict[int, np.ndarray],
         colormap: List[str] = None,
         show_error: bool = False,
-):
-    event_name = str(data.name).replace("_", " ").title()
+) -> Dict[str, go.Figure]:
+    mean_subj_dir = os.path.join(_FIGURES_DIR, "mean subject")
+    os.makedirs(mean_subj_dir, exist_ok=True)
     colormap = colormap or _DEFAULT_COLORMAP
-    fig = go.Figure()
-    for i, channel_name in enumerate(data.index):
-        channel_data = data[channel_name]
-        timestamps = channel_data.columns
-        mean = channel_data.mean(axis=0)
-        color = colormap[i % len(colormap)]
-        rgb = tuple(int((color.lstrip('#'))[j:j + 2], 16) for j in (0, 2, 4))
-        fig.add_trace(
-            go.Scatter(
-                x=timestamps,
-                y=mean,
-                name=channel_name.replace("_", " ").upper(),
-                mode='lines',
-                line=dict(color=f'rgba{rgb + (1,)}'),
-            )
+    mean_epochs = _aggregate_mean_epochs(subject_epochs, subject_is_rightwards)
+    figures = {}
+    for event_name in tqdm(mean_epochs.columns, desc="Mean Subject - Event Figures"):
+        if event_name.endswith("_corrected"):
+            # skip corrected epochs - they are already included in figures of raw epochs
+            continue
+        event_fig = make_subplots(
+            rows=2, cols=1, shared_xaxes='all', shared_yaxes='all', x_title=tavh.SAMPLES_STR, y_title="Amplitude (µV)",
+            subplot_titles=["Raw", "Direction Corrected"], horizontal_spacing=0.05,
         )
-        if show_error:
-            std = channel_data.std(axis=0)
-            fig.add_trace(
-                go.Scatter(
-                    x=np.hstack([timestamps, timestamps[::-1]]),
-                    y=np.hstack([mean + std, mean - std[::-1]]),
-                    name=channel_name.replace("_", " ").upper(),
-                    fill='toself',
-                    fillcolor=f'rgba{rgb + (0.2,)}',
-                    line=dict(color=f'rgba{rgb + (0.2,)}'),
-                    hoverinfo='skip',
-                    showlegend=False,
-                )
+        for n, channel_name in enumerate(tqdm(mean_epochs.index, desc="\tChannels")):
+            # top row: raw epochs
+            raw_data = mean_epochs.loc[channel_name, event_name]
+            if raw_data is None or np.isnan(raw_data).all().all() or raw_data.empty:
+                continue
+            event_fig.add_trace(
+                row=1, col=1,
+                trace=__create_line_trace(raw_data, colormap[n % len(colormap)], channel_name, showlegend=True),
             )
-    fig.add_vline(x=0, line_dash="dash", line_color="black", name=event_name)
-    fig.update_layout(title=f"Peri-{event_name}\t({subject_str})",
-                      xaxis_title="Samples",
-                      yaxis_title="Amplitude (uV)",
-                      showlegend=True)
-    return fig
+            if show_error:
+                event_fig.add_trace(
+                    row=1, col=1,
+                    trace=__create_error_area(raw_data, colormap[n % len(colormap)], channel_name),
+                )
+            event_fig.add_vline(row=1, col=1, x=0, line=dict(color='black', width=1, dash='dash'))
+            # bottom row: direction-corrected epochs
+            corrected_data = mean_epochs.loc[channel_name, f"{event_name}_corrected"]
+            event_fig.add_trace(
+                row=2, col=1,
+                trace=__create_line_trace(corrected_data, colormap[n % len(colormap)], channel_name, showlegend=False),
+            )
+            if show_error:
+                event_fig.add_trace(
+                    row=2, col=1,
+                    trace=__create_error_area(corrected_data, colormap[n % len(colormap)], channel_name),
+                )
+            event_fig.add_vline(row=2, col=1, x=0, line=dict(color='black', width=1, dash='dash'))
+        event_fig.update_layout(
+            title_text=f"Mean Subject - {event_name.replace('_', ' ').title()}",
+            showlegend=True
+        )
+        tavh.save_figure(event_fig, mean_subj_dir, f"{event_name}_all_channels")
+        figures[event_name] = event_fig
+    return figures
 
 
-def _peri_event_image(
-        data: pd.DataFrame,
+def create_mean_subject_channel_figures(
+        subject_epochs: Dict[int, pd.DataFrame],
+        subject_is_rightwards: Dict[int, np.ndarray],
+        line_color: str = _DEFAULT_COLORMAP[0],
+        scale_color: str = "Viridis",
+        show_error: bool = False,
+) -> Dict[str, Dict[str, go.Figure]]:
+    mean_subj_dir = os.path.join(_FIGURES_DIR, "mean subject")
+    os.makedirs(mean_subj_dir, exist_ok=True)
+    mean_epochs = _aggregate_mean_epochs(subject_epochs, subject_is_rightwards)
+    figures = {}
+    for event_name in mean_epochs.columns:
+        if event_name.endswith("_corrected"):
+            # skip corrected epochs - they are already included in figures of raw epochs
+            continue
+        figures[event_name] = {}
+        for channel_name in tqdm(_FOCUS_CHANNELS, desc=f"Mean Subject - {event_name.title()} - Channel Figures"):
+            raw_channel_data = mean_epochs.loc[channel_name, event_name]
+            if raw_channel_data is None or np.isnan(raw_channel_data).all().all() or raw_channel_data.empty:
+                continue
+            channel_fig = make_subplots(
+                rows=2, cols=2, shared_xaxes='all', shared_yaxes='rows', x_title=tavh.SAMPLES_STR,
+                row_heights=[0.25, 0.75], horizontal_spacing=0.05, vertical_spacing=0.05,
+                column_titles=["Raw", "Direction Corrected"],
+            )
+            # line traces on top row - raw data (left)
+            channel_fig.add_trace(
+                row=1, col=1,
+                trace=__create_line_trace(raw_channel_data, line_color, channel_name, showlegend=False),
+            )
+            if show_error:
+                channel_fig.add_trace(
+                    row=1, col=1,
+                    trace=__create_error_area(raw_channel_data, line_color, channel_name),
+                )
+            # line traces on top row - corrected data (right)
+            corrected_channel_data = mean_epochs.loc[channel_name, f"{event_name}_corrected"]
+            channel_fig.add_trace(
+                row=1, col=2,
+                trace=__create_line_trace(corrected_channel_data, line_color, channel_name, showlegend=False),
+            )
+            if show_error:
+                channel_fig.add_trace(
+                    row=1, col=2,
+                    trace=__create_error_area(corrected_channel_data, line_color, channel_name),
+                )
+            # heatmaps on bottom row - raw data (left) and corrected data (right)
+            channel_fig.add_trace(
+                row=2, col=1, trace=px.imshow(
+                    raw_channel_data, aspect='auto', color_continuous_scale=scale_color
+                ).data[0],
+            )
+            channel_fig.add_trace(
+                row=2, col=2, trace=px.imshow(
+                    corrected_channel_data, aspect='auto', color_continuous_scale=scale_color
+                ).data[0],
+            )
+            # add vline @ 0 for each subplot
+            [channel_fig.add_vline(row=r + 1, col=c + 1, x=0, line=dict(color='black', width=1, dash='dash'))
+             for r in range(2) for c in range(2)]
+            channel_fig.update_layout(
+                title_text=f"Mean Subject - {event_name.replace('_', ' ').title()} - {channel_name}",
+                showlegend=False,
+                coloraxis_showscale=False,
+                yaxis_title="Amplitude (µV)",
+                yaxis3_title=tavh.EPOCHS_STR.title(),
+            )
+            # store figure
+            tavh.save_figure(channel_fig, mean_subj_dir, f"{event_name}_{channel_name}")
+            figures[event_name][channel_name] = channel_fig
+    return figures
+
+
+def _calculate_event_epochs(
+        s: Subject,
+        event_name: str,
+        n_samples_before: int = _EPOCH_SAMPLES_BEFORE,
+        n_samples_after: int = _EPOCH_SAMPLES_AFTER,
+        enforce_trials: bool = True,
+) -> pd.Series:
+    event_idxs = s.get_eye_tracking_event_indices(event_name, enforce_trials)
+    channels = __extract_channels(s, event_name)
+    event_epochs = {}
+    for channel_name, data in channels.items():
+        channel_epochs = tavh.extract_epochs(data, event_idxs, n_samples_before, n_samples_after)
+        event_epochs[channel_name] = channel_epochs
+    event_epochs = pd.Series(event_epochs, name=event_name.replace(" ", "_").lower())
+    event_epochs.index.name = tavh.CHANNELS_STR
+    return event_epochs
+
+
+def _aggregate_mean_epochs(
+        subject_epochs: Dict[int, pd.DataFrame],
+        subject_is_rightwards: Dict[int, np.ndarray],
+) -> pd.DataFrame:
+    mean_dir = os.path.join(_FIGURES_DIR, "mean subject")
+    os.makedirs(mean_dir, exist_ok=True)
+    events, channels = subject_epochs[101].columns, subject_epochs[101].index  # example subject
+    mean_epochs = {}
+    for evnt in events:
+        raw_event_epochs, corrected_event_epochs = {}, {}
+        for ch_name in channels:
+            raw_ch_epochs, corrected_ch_epochs = [], []
+            for subj_idx in subject_epochs.keys():
+                subj_chan_epoch = subject_epochs[subj_idx].loc[ch_name, evnt]
+                if subj_chan_epoch is None or np.isnan(subj_chan_epoch).all().all() or subj_chan_epoch.empty:
+                    continue
+                raw_ch_epochs.append(subj_chan_epoch)
+                subj_is_rightward = subject_is_rightwards[subj_idx]
+                subj_chan_epoch_corrected = subj_chan_epoch.copy(deep=True)
+                subj_chan_epoch_corrected[subj_is_rightward] = -subj_chan_epoch_corrected[subj_is_rightward]
+                corrected_ch_epochs.append(subj_chan_epoch_corrected)
+            if not raw_ch_epochs or not corrected_ch_epochs:
+                continue
+            raw_event_epochs[ch_name] = pd.concat(raw_ch_epochs).groupby(level=0).mean()
+            corrected_event_epochs[ch_name] = pd.concat(corrected_ch_epochs).groupby(level=0).mean()
+        raw_event_epochs = pd.Series(raw_event_epochs, name=evnt.replace(" ", "_").lower())
+        corrected_event_epochs = pd.Series(corrected_event_epochs, name=f"{evnt.replace(' ', '_').lower()}_corrected")
+        mean_epochs[raw_event_epochs.name] = raw_event_epochs
+        mean_epochs[corrected_event_epochs.name] = corrected_event_epochs
+    mean_epochs = pd.DataFrame(mean_epochs)
+    mean_epochs.index.name = tavh.CHANNELS_STR
+    mean_epochs.columns.name = tavh.EVENTS_STR
+    # save to file  # commented out to avoid overwriting
+    # with open(os.path.join(mean_dir, "mean_epochs.pkl"), "wb") as f:
+    #     pkl.dump(mean_epochs, f)
+    return mean_epochs
+
+
+def _create_event_figure(
+        epochs: pd.Series,
+        is_rightward: np.ndarray,
         title: str,
-        vlines: List[float] = None,
-):
-    fig = px.imshow(data, aspect='auto')
-    fig.add_vline(x=0, line_width=2, line_dash="dash", line_color="black")
-    for v in vlines or []:
-        fig.add_vline(x=v, line_width=1, line_dash="dash", line_color="black")
+        colormap: List[str] = None,
+        show_error: bool = False,
+) -> go.Figure:
+    colormap = colormap or _DEFAULT_COLORMAP
+    fig = make_subplots(
+        rows=2, cols=1, shared_xaxes='all', shared_yaxes='all', x_title=tavh.SAMPLES_STR, y_title="Amplitude (µV)",
+        subplot_titles=["Raw", "Direction Corrected"], horizontal_spacing=0.05,
+    )
+    for n, channel_name in enumerate(epochs.index):
+        data = epochs.loc[channel_name]
+        if data is None or np.isnan(data).all().all() or data.empty:
+            continue
+        data = data.copy(deep=True)     # avoid modifying original data
+        for r in range(2):
+            if r == 1:
+                # correct for saccade direction
+                data[is_rightward] = -data[is_rightward]
+            fig.add_trace(
+                row=r + 1, col=1,
+                trace=__create_line_trace(data, colormap[n % len(colormap)], channel_name, showlegend=r == 1),
+            )
+            if show_error:
+                fig.add_trace(
+                    row=r + 1, col=1,
+                    trace=__create_error_area(data, colormap[n % len(colormap)], channel_name),
+                )
+            fig.add_vline(row=r + 1, col=1, x=0, line=dict(color='black', width=1, dash='dash'))
     fig.update_layout(
-        title=title,
-        xaxis=dict(
-            tickmode='array',
-            tickvals=[t for t in data.columns if t % 50 == 0],
-            ticktext=[t for t in data.columns if t % 50 == 0],
-        ),
-    ),
+        title_text=title,
+        showlegend=True
+    )
     return fig
+
+
+def _create_channel_figure(
+        channel_data: pd.DataFrame,
+        is_rightward: np.ndarray,
+        channel_name: str,
+        title: str,
+        line_color: str = _DEFAULT_COLORMAP[0],
+        scale_color: str = "Viridis",
+        show_error: bool = False,
+) -> go.Figure:
+    fig = make_subplots(
+        rows=2, cols=2, shared_xaxes='all', shared_yaxes='rows', x_title=tavh.SAMPLES_STR, row_heights=[0.25, 0.75],
+        horizontal_spacing=0.05, vertical_spacing=0.05, column_titles=["Raw", "Direction Corrected"],
+    )
+    corrected_data = channel_data.copy(deep=True)
+    corrected_data[is_rightward] = -corrected_data[is_rightward]
+    # line traces on top row
+    fig.add_trace(
+        row=1, col=1,
+        trace=__create_line_trace(channel_data, line_color, channel_name, showlegend=False),
+    )
+    if show_error:
+        fig.add_trace(
+            row=1, col=1,
+            trace=__create_error_area(channel_data, line_color, channel_name),
+        )
+    fig.add_trace(
+        row=1, col=2,
+        trace=__create_line_trace(corrected_data, line_color, channel_name, showlegend=False),
+    )
+    if show_error:
+        fig.add_trace(
+            row=1, col=2,
+            trace=__create_error_area(corrected_data, line_color, channel_name),
+        )
+    # heatmaps on bottom row
+    fig.add_trace(
+        row=2, col=1, trace=px.imshow(channel_data, aspect='auto', color_continuous_scale=scale_color).data[0],
+    )
+    fig.add_trace(
+        row=2, col=2, trace=px.imshow(corrected_data, aspect='auto', color_continuous_scale=scale_color).data[0],
+    )
+    # add vline @ 0 for each subplot
+    [fig.add_vline(row=r + 1, col=c + 1, x=0, line=dict(color='black', width=1, dash='dash'))
+     for r in range(2) for c in range(2)]
+    fig.update_layout(
+        title_text=title,
+        showlegend=False,
+        coloraxis_showscale=False,
+        yaxis_title="Amplitude (µV)",
+        yaxis3_title=tavh.EPOCHS_STR.title(),
+    )
+    return fig
+
+
+def __extract_channels(s: Subject, event_name: str) -> Dict[str, np.ndarray]:
+    evnt = event_name.lower().replace(" ", "_")
+    if evnt not in {"saccade_onset", "saccade_offset"}:
+        raise ValueError(f"Event {event_name} not recognized")
+    channels = {"REOG": s.get_channel("reog")}
+    if evnt == "saccade_onset":
+        channels["REOG_FILTERED"] = tavh.apply_filter(channels["REOG"], "srp")
+        # TODO: add REOG_FILTERED channel for saccade offset (use different filter?)
+    for channel_name in s.eeg_channels.keys():
+        if channel_name.lower().endswith("z"):
+            channels[channel_name] = s.get_channel(channel_name, full_ica=True)     # clean any eye-movement artifacts
+            continue
+        elec_num = int(re.search(r'\d+', channel_name).group())     # https://stackoverflow.com/a/7085715/8543025
+        if elec_num % 2 == 1:
+            # left-side channels are subtracted from right-side channels
+            continue
+        elec_name = channel_name[:channel_name.index(str(elec_num))]
+        left_channel_name = f"{elec_name}{elec_num - 1}"
+        right_channel = s.get_channel(channel_name, full_ica=True)                  # clean any eye-movement artifacts
+        left_channel = s.get_channel(left_channel_name, full_ica=True)              # clean any eye-movement artifacts
+        diff = right_channel - left_channel
+        channels[f"{channel_name} - {left_channel_name}"] = diff
+    return channels
+
+
+
+def __create_line_trace(data: pd.DataFrame, color: str, name: str, showlegend: bool) -> go.Scatter:
+    ts = data.columns
+    mean = data.mean(axis=0)
+    rgb = tuple(int((color.lstrip('#'))[j:j + 2], 16) for j in (0, 2, 4))
+    name = name.replace("_", " ").upper()
+    trace = go.Scatter(
+        x=ts,
+        y=mean,
+        name=name,
+        legendgroup=name,
+        showlegend=showlegend,
+        mode='lines',
+        line=dict(color=f'rgba{rgb + (1,)}', width=1),
+    )
+    return trace
+
+
+def __create_error_area(data: pd.DataFrame, color: str, name: str) -> go.Scatter:
+    ts = data.columns
+    mean = data.mean(axis=0)
+    std = data.std(axis=0)
+    rgb = tuple(int((color.lstrip('#'))[j:j + 2], 16) for j in (0, 2, 4))
+    name = name.replace("_", " ").upper()
+    trace = go.Scatter(
+        x=np.hstack([ts, ts[::-1]]),
+        y=np.hstack([mean + std, mean - std[::-1]]),
+        name=name,
+        legendgroup=name,
+        showlegend=False,
+        fill='toself',
+        fillcolor=f'rgba{rgb + (0.2,)}',
+        line=dict(color=f'rgba{rgb + (0.2,)}'),
+        hoverinfo='skip',
+    )
+    return trace
