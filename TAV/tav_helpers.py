@@ -3,6 +3,7 @@ import os
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
+import plotly.express as px
 import scipy.signal as signal
 import pywt
 
@@ -12,6 +13,7 @@ EPOCHS_STR = "Epochs"
 SAMPLES_STR = "Samples"
 CHANNELS_STR = "Channels"
 EVENTS_STR = "Events"
+DEFAULT_COLORMAP = px.colors.qualitative.Dark24
 SAMPLING_FREQUENCY = 1024  # eeg sampling frequency
 
 SRP_FILTER = np.array([

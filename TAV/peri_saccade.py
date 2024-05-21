@@ -107,7 +107,7 @@ def create_mean_subject_event_figures(
 ) -> Dict[str, go.Figure]:
     mean_subj_dir = os.path.join(_FIGURES_DIR, "mean subject")
     os.makedirs(mean_subj_dir, exist_ok=True)
-    colormap = colormap or _DEFAULT_COLORMAP
+    colormap = colormap or tavh.DEFAULT_COLORMAP
     mean_epochs = _aggregate_mean_epochs(subject_epochs, subject_is_rightwards)
     figures = {}
     for event_name in tqdm(mean_epochs.columns, desc="Mean Subject - Event Figures"):
@@ -157,7 +157,7 @@ def create_mean_subject_event_figures(
 def create_mean_subject_channel_figures(
         subject_epochs: Dict[int, pd.DataFrame],
         subject_is_rightwards: Dict[int, np.ndarray],
-        line_color: str = _DEFAULT_COLORMAP[0],
+        line_color: str = tavh.DEFAULT_COLORMAP[0],
         scale_color: str = "Viridis",
         show_error: bool = False,
 ) -> Dict[str, Dict[str, go.Figure]]:
@@ -290,7 +290,7 @@ def _create_event_figure(
         colormap: List[str] = None,
         show_error: bool = False,
 ) -> go.Figure:
-    colormap = colormap or _DEFAULT_COLORMAP
+    colormap = colormap or tavh.DEFAULT_COLORMAP
     fig = make_subplots(
         rows=2, cols=1, shared_xaxes='all', shared_yaxes='all', x_title=tavh.SAMPLES_STR, y_title="Amplitude (µV)",
         subplot_titles=["Raw", "Direction Corrected"], horizontal_spacing=0.05,
@@ -326,7 +326,7 @@ def _create_channel_figure(
         is_rightward: np.ndarray,
         channel_name: str,
         title: str,
-        line_color: str = _DEFAULT_COLORMAP[0],
+        line_color: str = tavh.DEFAULT_COLORMAP[0],
         scale_color: str = "Viridis",
         show_error: bool = False,
 ) -> go.Figure:
