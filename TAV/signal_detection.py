@@ -249,7 +249,7 @@ def __calculate_rates_for_sdt(p, n, pp, tp, correction: Optional[str] = None) ->
         return hr, far
     if correction in {"ll", "loglinear", "log-linear", "hautus"}:
         # Hautus (1995) correction
-        hr, far = __loglinear_correction(p, n, pp, tp)
+        hr, far = __loglinear_rate_correction(p, n, pp, tp)
         return hr, far
     raise ValueError(f"Invalid correction: {correction}")
 
@@ -269,7 +269,7 @@ def __macmillan_kaplan_correction(full_count: int, detected_count: int) -> float
     return rate
 
 
-def __loglinear_correction(p, n, pp, tp) -> (float, float):
+def __loglinear_rate_correction(p, n, pp, tp) -> (float, float):
     """
     Calculates the Hit Rate & False Alarm Rate while adjusting for floor/ceiling effects by adding the proportion of
     positive and negative events to the counts, as suggested by Hautus (1995).
