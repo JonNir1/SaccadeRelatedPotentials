@@ -1,6 +1,6 @@
 import os
 import pickle as pkl
-from typing import List
+from typing import List, Optional
 
 import numpy as np
 import pandas as pd
@@ -17,8 +17,8 @@ _FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.FIGURES_STR)
 
 WINDOW_SIZES = np.arange(21)
 COLORS = {
-    "HR": "#2166ac", "FAR": "#8c510a", "d'": "#762a83",
-    "c": "#b35806", "PPV": "#01665e", "F1": "#c51b7d",  # comment out if not needed
+    "recall": "#2166ac", "far": "#8c510a", "d'": "#762a83",
+    "c": "#b35806", "precision": "#01665e", "f1": "#c51b7d",  # comment out if not needed
 }
 
 #####################
@@ -68,10 +68,10 @@ def saccade_event_detection_measures(
         - N: number of negative events in the Ground-Truth
         - PP: number of positive events in the Predictions
         - TP: number of correctly detected positive events
-        - HR: Hit Rate (Sensitivity, Recall, True Positive Rate)
-        - FAR: False Alarm Rate (False Positive Rate, Type I Error, 1 - Specificity)
-        - PPV: Positive Predictive Value (Precision)
-        - F1: F1 Score
+        - recall: Hit Rate (Sensitivity, Recall, True Positive Rate)
+        - precision: Positive Predictive Value (PPV)
+        - far: False Alarm Rate (False Positive Rate, Type I Error, 1 - Specificity)
+        - f1: F1 Score
         - d': d-prime, Sensitivity Index
         - beta: Response Bias
         - c: Decision Criterion
@@ -115,24 +115,24 @@ def _calculate_signal_detection_measures(P: int, N: int, PP: int, TP: int) -> pd
         - N: number of negative events in the Ground-Truth
         - PP: number of positive events in the Predictions
         - TP: number of correctly detected positive events
-        - HR: Hit Rate (Sensitivity, Recall, True Positive Rate)
-        - FAR: False Alarm Rate (False Positive Rate, Type I Error, 1 - Specificity)
-        - PPV: Positive Predictive Value (Precision)
-        - F1: F1 Score
+        - recall: Hit Rate (Sensitivity, Recall, True Positive Rate)
+        - precision: Positive Predictive Value (PPV)
+        - far: False Alarm Rate (False Positive Rate, Type I Error, 1 - Specificity)
+        - f1: F1 Score
         - d': d-prime, Sensitivity Index
         - beta: Response Bias
         - c: Decision Criterion
     """
     assert P >= 0 and N >= 0 and PP >= 0 and TP >= 0, "All values must be non-negative"
     assert TP <= P and TP <= PP, "TP must be less than or equal to P and PP"
-    hit_rate = __calc_rate(P, TP)        # aka sensitivity, recall, true positive rate (TPR)
-    fa_rate = __calc_rate(N, PP - TP)    # aka false alarm rate, false positive rate (FPR), type I error
-    precision = __calc_rate(PP, TP)      # aka positive predictive value (PPV)
+    hit_rate = TP / P if P > 0 else np.nan           # sensitivity, recall, true positive rate (TPR)
+    fa_rate = (PP - TP) / N if N > 0 else np.nan     # false alarm rate, false positive rate (FPR), type I error, 1 - specificity
+    precision = TP / PP if PP > 0 else np.nan        # positive predictive value (PPV)
     f1_score = 2 * precision * hit_rate / (precision + hit_rate) if precision + hit_rate > 0 else 0
-    d_prime, beta, criterion = __calc_dprime_beta_criterion(hit_rate, fa_rate)
+    d_prime, beta, criterion = _calculate_sdt_measures(P, N, PP, TP, "loglinear")
     return pd.Series({
-        'P': P, 'N': N, 'PP': PP, 'TP': TP, 'HR': hit_rate, 'FAR': fa_rate,
-        'PPV': precision, 'F1': f1_score, 'd\'': d_prime, 'beta': beta, 'c': criterion,
+        'P': P, 'N': N, 'PP': PP, 'TP': TP, "precision": precision, "recall": hit_rate, 'far': fa_rate, "f1": f1_score,
+        'd\'': d_prime, 'beta': beta, 'c': criterion,
     })
 
 
@@ -197,8 +197,11 @@ def _create_mean_measures_figure(stats: List[pd.DataFrame]) -> go.Figure:
 
 def __calc_rate(true_count: int, detected_count: int) -> float:
     """
-    Calculates the Hit Rate / False Alarm Rate while adjusting for floor/ceiling effects.
-    See https://lindeloev.net/calculating-d-in-python-and-php/ for more details.
+    Calculates the Hit Rate / False Alarm Rate while adjusting for floor/ceiling effects by replacing 0 and 1 rates with
+    0.25/true_count and 1-0.25/true_count, respectively, as suggested by Macmillan & Kaplan (1985).
+
+    See implementation details at https://lindeloev.net/calculating-d-in-python-and-php/
+    See other forms of correction at https://stats.stackexchange.com/a/134802/288290
     """
     assert 0 <= detected_count <= true_count, "Detected Count must be between 0 and True Count"
     quarter_true = 0.25 / true_count
@@ -212,7 +215,7 @@ def __calc_rate(true_count: int, detected_count: int) -> float:
 
 def __calc_dprime_beta_criterion(hr: float, far: float) -> (float, float, float):
     """
-    Calculates d-prime beta and criterion from Hit Rate and False Alarm Rate, while adjusting for floor/ceiling effects.
+    Calculates d-prime, beta and criterion from Hit Rate and False Alarm Rate, while adjusting for floor/ceiling effects.
     See https://lindeloev.net/calculating-d-in-python-and-php/ for more details.
     """
     assert 0 <= hr <= 1, "Hit Rate must be between 0 and 1"
@@ -222,3 +225,78 @@ def __calc_dprime_beta_criterion(hr: float, far: float) -> (float, float, float)
     beta = np.exp((Z(far)**2 - Z(hr)**2) / 2)
     criterion = -0.5 * (Z(hr) + Z(far))
     return d_prime, beta, criterion
+
+
+def _calculate_sdt_measures(
+        p: int, n: int, pp: int, tp: int, correction: Optional[str] = "loglinear"
+) -> (float, float, float):
+    """
+    Calculates Signal Detection Theory measures: d-prime, beta and criterion.
+    Optionally, adjusts for floor/ceiling effects using the specified correction method.
+    See information on correction methods at https://stats.stackexchange.com/a/134802/288290.
+    See implementation details at https://lindeloev.net/calculating-d-in-python-and-php/.
+    :return: d-prime, beta, criterion
+    """
+    assert 0 <= p and 0 <= n, "Positive and Negative counts must be non-negative"
+    assert 0 <= pp <= p + n, "Predicted Positive count must be between 0 and Total count"
+    assert 0 <= tp <= p, "True Positive count must be between 0 and Positive count"
+    assert 0 <= tp <= pp, "True Positive count must be between 0 and Predicted Positive count"
+    Z = norm.ppf
+    hr, far = __calculate_rates_for_sdt(p, n, pp, tp, correction)
+    d_prime = Z(hr) - Z(far)
+    beta = np.exp((Z(far) ** 2 - Z(hr) ** 2) / 2)
+    criterion = -0.5 * (Z(hr) + Z(far))
+    return d_prime, beta, criterion
+
+
+def __calculate_rates_for_sdt(p, n, pp, tp, correction: Optional[str] = None) -> (float, float):
+    if correction is None or not correction:
+        # correction not specified, return as is
+        hr = tp / p if p > 0 else np.nan
+        far = (pp - tp) / n if n > 0 else np.nan
+        return hr, far
+    if correction in {"mk", "m&k", "macmillan-kaplan", "macmillan"}:
+        # Macmillan & Kaplan (1985) correction
+        hr = __macmillan_kaplan_correction(p, tp)
+        far = __macmillan_kaplan_correction(n, pp - tp)
+        return hr, far
+    if correction in {"ll", "loglinear", "log-linear", "hautus"}:
+        # Hautus (1995) correction
+        hr, far = __loglinear_correction(p, n, pp, tp)
+        return hr, far
+    raise ValueError(f"Invalid correction: {correction}")
+
+
+def __macmillan_kaplan_correction(full_count: int, detected_count: int) -> float:
+    """
+    Calculates the Hit Rate / False Alarm Rate while adjusting for floor/ceiling effects by replacing 0 and 1 rates with
+    0.5/true_count and 1-0.5/true_count, respectively, as suggested by Macmillan & Kaplan (1985).
+    See more details at https://stats.stackexchange.com/a/134802/288290.
+    Implementation from https://lindeloev.net/calculating-d-in-python-and-php/.
+    """
+    rate = detected_count / full_count if full_count > 0 else np.nan
+    if rate == 0:
+        rate = 0.5 / full_count
+    if rate == 1:
+        rate = 1 - 0.5 / full_count
+    return rate
+
+
+def __loglinear_correction(p, n, pp, tp) -> (float, float):
+    """
+    Calculates the Hit Rate & False Alarm Rate while adjusting for floor/ceiling effects by adding the proportion of
+    positive and negative events to the counts, as suggested by Hautus (1995).
+    See https://stats.stackexchange.com/a/134802/288290 for more details.
+    """
+    fp = pp - tp
+    hr = tp / p if p > 0 else np.nan
+    far = fp / n if n > 0 else np.nan
+    if hr != 0 and hr != 1 and far != 0 and far != 1:
+        # no correction needed
+        return hr, far
+    prevalence = p / (p + n)
+    tp, fp = tp + prevalence, fp + 1 - prevalence
+    p, n = p + 2 * prevalence, n + 2 * (1 - prevalence)
+    hr = tp / p if p > 0 else np.nan
+    far = fp / n if n > 0 else np.nan
+    return hr, far
