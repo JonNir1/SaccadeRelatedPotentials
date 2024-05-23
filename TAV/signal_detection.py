@@ -69,7 +69,7 @@ def saccade_event_detection_measures(
         - PP: number of positive events in the Predictions
         - TP: number of correctly detected positive events
         - HR: Hit Rate (Sensitivity, Recall, True Positive Rate)
-        - FAR: False Alarm Rate (False Positive Rate, Type I Error)
+        - FAR: False Alarm Rate (False Positive Rate, Type I Error, 1 - Specificity)
         - PPV: Positive Predictive Value (Precision)
         - F1: F1 Score
         - d': d-prime, Sensitivity Index
@@ -116,7 +116,7 @@ def _calculate_signal_detection_measures(P: int, N: int, PP: int, TP: int) -> pd
         - PP: number of positive events in the Predictions
         - TP: number of correctly detected positive events
         - HR: Hit Rate (Sensitivity, Recall, True Positive Rate)
-        - FAR: False Alarm Rate (False Positive Rate, Type I Error)
+        - FAR: False Alarm Rate (False Positive Rate, Type I Error, 1 - Specificity)
         - PPV: Positive Predictive Value (Precision)
         - F1: F1 Score
         - d': d-prime, Sensitivity Index
