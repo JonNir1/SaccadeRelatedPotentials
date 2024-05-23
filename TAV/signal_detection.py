@@ -214,20 +214,6 @@ def __calc_rate(true_count: int, detected_count: int) -> float:
     return rate
 
 
-def __calc_dprime_beta_criterion(hr: float, far: float) -> (float, float, float):
-    """
-    Calculates d-prime, beta and criterion from Hit Rate and False Alarm Rate, while adjusting for floor/ceiling effects.
-    See https://lindeloev.net/calculating-d-in-python-and-php/ for more details.
-    """
-    assert 0 <= hr <= 1, "Hit Rate must be between 0 and 1"
-    assert 0 <= far <= 1, "False Alarm Rate must be between 0 and 1"
-    Z = norm.ppf
-    d_prime = Z(hr) - Z(far)
-    beta = np.exp((Z(far)**2 - Z(hr)**2) / 2)
-    criterion = -0.5 * (Z(hr) + Z(far))
-    return d_prime, beta, criterion
-
-
 def _calculate_sdt_measures(
         p: int, n: int, pp: int, tp: int, correction: Optional[str] = "loglinear"
 ) -> (float, float, float):
