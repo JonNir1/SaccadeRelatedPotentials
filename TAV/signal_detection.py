@@ -5,6 +5,7 @@ from typing import List, Optional
 import numpy as np
 import pandas as pd
 from scipy.stats import norm
+from tqdm import tqdm
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
 import plotly.io as pio
@@ -29,7 +30,7 @@ def load_or_calc_saccade_onset():
     event_name = "saccade_onset"
     filename_format = "%d_" + event_name
     measures, subject_figures = {}, {}
-    for idx in range(101, 111):
+    for idx in tqdm(range(101, 111), desc="Subjects"):
         # load subject stats
         stats_file_path = os.path.join(_OUTPUT_DIR, filename_format % idx + ".pkl")
         try:
