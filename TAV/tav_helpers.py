@@ -35,7 +35,7 @@ def create_filter(name: str) -> (np.ndarray, np.ndarray):
         return SRP_FILTER, np.ones_like(SRP_FILTER)
     if name == 'butter':
         # TODO
-        b, a = signal.butter(6, Wn=np.array([30, 100]), fs=SAMPLING_FREQUENCY, btype='bandpass')
+        # b, a = signal.butter(6, Wn=np.array([30, 100]), fs=SAMPLING_FREQUENCY, btype='bandpass')
         # return b, a
         raise NotImplementedError
     if name == 'wavelet':
