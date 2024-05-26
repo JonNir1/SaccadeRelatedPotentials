@@ -5,7 +5,6 @@ import pandas as pd
 import plotly.graph_objects as go
 import plotly.express as px
 import scipy.signal as signal
-import pywt
 
 OUTPUT_DIR = os.path.join("results", "tav")
 FIGURES_STR = "Figures"
@@ -40,9 +39,10 @@ def create_filter(name: str) -> (np.ndarray, np.ndarray):
         raise NotImplementedError
     if name == 'wavelet':
         # TODO
-        wavelet = pywt.ContinuousWavelet("gaus1", dtype=float)
-        phi, psi, _x = wavelet.wavefun(level=3)
-        return phi, psi
+        # wavelet = pywt.ContinuousWavelet("gaus1", dtype=float)
+        # phi, psi, _x = wavelet.wavefun(level=3)
+        # return phi, psi
+        raise NotImplementedError
     raise ValueError(f"Filter {name} not recognized")
 
 
