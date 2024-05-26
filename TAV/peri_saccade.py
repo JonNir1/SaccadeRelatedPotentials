@@ -15,7 +15,7 @@ import TAV.tav_helpers as tavh
 from TAV.Subject import Subject
 
 _OUTPUT_DIR = tavh.get_output_subdir(os.path.basename(__file__))
-_FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.FIGURES_STR)
+_FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.constants.FIGURES_STR)
 
 _FOCUS_CHANNELS = ["REOG", "REOG_FILTERED", "F4 - F3", "F6 - F5", "F8 - F7", "FC6 - FC5", "FT8 - FT7", "T8 - T7"]
 _EPOCH_SAMPLES_BEFORE, _EPOCH_SAMPLES_AFTER = 250, 250
@@ -27,7 +27,7 @@ def load_or_calc(calc_mean: bool = True):
     subject_epochs, subject_is_rightwards = {}, {}
     subject_figures = {}
     for i in tqdm(range(101, 111), desc="Subjects"):
-        s = Subject.load_or_make(i, tavh.OUTPUT_DIR)
+        s = Subject.load_or_make(i, tavh.RESULTS_DIR)
         subject_epochs[s.idx] = load_or_calc_epochs(s)
         azimuth = s.get_saccade_feature("azimuth", enforce_trials=True)
         subject_is_rightwards[s.idx] = (-90 <= azimuth) & (azimuth < 90)
@@ -47,7 +47,7 @@ def load_or_calc(calc_mean: bool = True):
 
 def load_or_calc_epochs(s: Subject) -> pd.DataFrame:
     os.makedirs(_OUTPUT_DIR, exist_ok=True)
-    fname = f"s{s.idx}_{tavh.EPOCHS_STR.lower()}"
+    fname = f"s{s.idx}_{tavh.constants.EPOCHS_STR.lower()}"
     try:
         with open(os.path.join(_OUTPUT_DIR, f"{fname}.pkl"), "rb") as f:
             return pkl.load(f)
@@ -59,8 +59,8 @@ def load_or_calc_epochs(s: Subject) -> pd.DataFrame:
             )
         # store as DataFrame
         epochs = pd.DataFrame(epochs)
-        epochs.index.name = tavh.CHANNELS_STR
-        epochs.columns.name = tavh.EVENTS_STR
+        epochs.index.name = tavh.constants.CHANNELS_STR
+        epochs.columns.name = tavh.constants.EVENTS_STR
         with open(os.path.join(_OUTPUT_DIR, f"{fname}.pkl"), "wb") as f:
             pkl.dump(epochs, f)
         return epochs
@@ -107,7 +107,7 @@ def create_mean_subject_event_figures(
 ) -> Dict[str, go.Figure]:
     mean_subj_dir = os.path.join(_FIGURES_DIR, "mean subject")
     os.makedirs(mean_subj_dir, exist_ok=True)
-    colormap = colormap or tavh.DEFAULT_COLORMAP
+    colormap = colormap or tavh.constants.DEFAULT_COLORMAP
     mean_epochs = _aggregate_mean_epochs(subject_epochs, subject_is_rightwards)
     figures = {}
     for event_name in tqdm(mean_epochs.columns, desc="Mean Subject - Event Figures"):
@@ -115,7 +115,7 @@ def create_mean_subject_event_figures(
             # skip corrected epochs - they are already included in figures of raw epochs
             continue
         event_fig = make_subplots(
-            rows=2, cols=1, shared_xaxes='all', shared_yaxes='all', x_title=tavh.SAMPLES_STR, y_title="Amplitude (µV)",
+            rows=2, cols=1, shared_xaxes='all', shared_yaxes='all', x_title=tavh.constants.SAMPLES_STR, y_title="Amplitude (µV)",
             subplot_titles=["Raw", "Direction Corrected"], horizontal_spacing=0.05,
         )
         for n, channel_name in enumerate(tqdm(mean_epochs.index, desc="\tChannels")):
@@ -157,7 +157,7 @@ def create_mean_subject_event_figures(
 def create_mean_subject_channel_figures(
         subject_epochs: Dict[int, pd.DataFrame],
         subject_is_rightwards: Dict[int, np.ndarray],
-        line_color: str = tavh.DEFAULT_COLORMAP[0],
+        line_color: str = tavh.constants.DEFAULT_COLORMAP[0],
         scale_color: str = "Viridis",
         show_error: bool = False,
 ) -> Dict[str, Dict[str, go.Figure]]:
@@ -175,7 +175,7 @@ def create_mean_subject_channel_figures(
             if raw_channel_data is None or np.isnan(raw_channel_data).all().all() or raw_channel_data.empty:
                 continue
             channel_fig = make_subplots(
-                rows=2, cols=2, shared_xaxes='all', shared_yaxes='rows', x_title=tavh.SAMPLES_STR,
+                rows=2, cols=2, shared_xaxes='all', shared_yaxes='rows', x_title=tavh.constants.SAMPLES_STR,
                 row_heights=[0.25, 0.75], horizontal_spacing=0.05, vertical_spacing=0.05,
                 column_titles=["Raw", "Direction Corrected"],
             )
@@ -219,7 +219,7 @@ def create_mean_subject_channel_figures(
                 showlegend=False,
                 coloraxis_showscale=False,
                 yaxis_title="Amplitude (µV)",
-                yaxis3_title=tavh.EPOCHS_STR.title(),
+                yaxis3_title=tavh.constants.EPOCHS_STR.title(),
             )
             # store figure
             tavh.save_figure(channel_fig, mean_subj_dir, f"{event_name}_{channel_name}")
@@ -241,7 +241,7 @@ def _calculate_event_epochs(
         channel_epochs = tavh.extract_epochs(data, event_idxs, n_samples_before, n_samples_after)
         event_epochs[channel_name] = channel_epochs
     event_epochs = pd.Series(event_epochs, name=event_name.replace(" ", "_").lower())
-    event_epochs.index.name = tavh.CHANNELS_STR
+    event_epochs.index.name = tavh.constants.CHANNELS_STR
     return event_epochs
 
 
@@ -275,8 +275,8 @@ def _aggregate_mean_epochs(
         mean_epochs[raw_event_epochs.name] = raw_event_epochs
         mean_epochs[corrected_event_epochs.name] = corrected_event_epochs
     mean_epochs = pd.DataFrame(mean_epochs)
-    mean_epochs.index.name = tavh.CHANNELS_STR
-    mean_epochs.columns.name = tavh.EVENTS_STR
+    mean_epochs.index.name = tavh.constants.CHANNELS_STR
+    mean_epochs.columns.name = tavh.constants.EVENTS_STR
     # save to file  # commented out to avoid overwriting
     # with open(os.path.join(mean_dir, "mean_epochs.pkl"), "wb") as f:
     #     pkl.dump(mean_epochs, f)
@@ -290,10 +290,10 @@ def _create_event_figure(
         colormap: List[str] = None,
         show_error: bool = False,
 ) -> go.Figure:
-    colormap = colormap or tavh.DEFAULT_COLORMAP
+    colormap = colormap or tavh.constants.DEFAULT_COLORMAP
     fig = make_subplots(
-        rows=2, cols=1, shared_xaxes='all', shared_yaxes='all', x_title=tavh.SAMPLES_STR, y_title="Amplitude (µV)",
-        subplot_titles=["Raw", "Direction Corrected"], horizontal_spacing=0.05,
+        rows=2, cols=1, shared_xaxes='all', shared_yaxes='all', x_title=tavh.constants.SAMPLES_STR,
+        y_title="Amplitude (µV)", subplot_titles=["Raw", "Direction Corrected"], horizontal_spacing=0.05,
     )
     for n, channel_name in enumerate(epochs.index):
         data = epochs.loc[channel_name]
@@ -326,13 +326,14 @@ def _create_channel_figure(
         is_rightward: np.ndarray,
         channel_name: str,
         title: str,
-        line_color: str = tavh.DEFAULT_COLORMAP[0],
+        line_color: str = tavh.constants.DEFAULT_COLORMAP[0],
         scale_color: str = "Viridis",
         show_error: bool = False,
 ) -> go.Figure:
     fig = make_subplots(
-        rows=2, cols=2, shared_xaxes='all', shared_yaxes='rows', x_title=tavh.SAMPLES_STR, row_heights=[0.25, 0.75],
-        horizontal_spacing=0.05, vertical_spacing=0.05, column_titles=["Raw", "Direction Corrected"],
+        rows=2, cols=2, shared_xaxes='all', shared_yaxes='rows', x_title=tavh.constants.SAMPLES_STR,
+        row_heights=[0.25, 0.75], horizontal_spacing=0.05, vertical_spacing=0.05,
+        column_titles=["Raw", "Direction Corrected"],
     )
     corrected_data = channel_data.copy(deep=True)
     corrected_data[is_rightward] = -corrected_data[is_rightward]
@@ -370,7 +371,7 @@ def _create_channel_figure(
         showlegend=False,
         coloraxis_showscale=False,
         yaxis_title="Amplitude (µV)",
-        yaxis3_title=tavh.EPOCHS_STR.title(),
+        yaxis3_title=tavh.constants.EPOCHS_STR.title(),
     )
     return fig
 

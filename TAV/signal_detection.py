@@ -14,7 +14,7 @@ import TAV.tav_helpers as tavh
 from TAV.Subject import Subject
 
 _OUTPUT_DIR = tavh.get_output_subdir(os.path.basename(__file__))
-_FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.FIGURES_STR)
+_FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.constants.FIGURES_STR)
 
 WINDOW_SIZES = np.arange(21)
 COLORS = {
@@ -37,7 +37,7 @@ def load_or_calc_saccade_onset():
             with open(stats_file_path, "rb") as f:
                 measures[idx] = pkl.load(f)
         except FileNotFoundError:
-            s = Subject.load_or_make(idx, tavh.OUTPUT_DIR)
+            s = Subject.load_or_make(idx, tavh.RESULTS_DIR)
             measures[idx] = saccade_event_detection_measures(s, event_name, WINDOW_SIZES)
             with open(stats_file_path, "wb") as f:
                 pkl.dump(measures[idx], f)

@@ -3,18 +3,13 @@ import os
 import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
-import plotly.express as px
 import scipy.signal as signal
 
-OUTPUT_DIR = os.path.join("results", "tav")
-FIGURES_STR = "Figures"
-EPOCHS_STR = "Epochs"
-SAMPLES_STR = "Samples"
-CHANNELS_STR = "Channels"
-EVENTS_STR = "Events"
-DEFAULT_COLORMAP = px.colors.qualitative.Dark24
-SAMPLING_FREQUENCY = 1024  # eeg sampling frequency
+import constants
 
+
+DATA_DIR = os.path.join(constants.DATA_DIR, "tav")
+RESULTS_DIR = os.path.join(constants.RESULTS_DIR, "tav")
 SRP_FILTER = np.array([
     0.000e+00, -0.000e+00, -1.000e-04, -2.000e-04, -2.000e-04, -1.000e-04, 1.000e-04, 3.000e-04, 7.000e-04, 1.500e-03,
     2.800e-03, 5.000e-03, 8.000e-03, 1.140e-02, 1.510e-02, 1.880e-02, 2.170e-02, 2.410e-02, 2.670e-02, 2.720e-02,
@@ -125,14 +120,14 @@ def extract_epochs(
     epochs = pd.DataFrame(
         epochs, index=np.arange(epochs.shape[0]), columns=np.arange(-n_samples_before, n_samples_after)
     )
-    epochs.index.name = EPOCHS_STR
-    epochs.columns.name = SAMPLES_STR
+    epochs.index.name = constants.EPOCHS_STR
+    epochs.columns.name = constants.SAMPLES_STR
     return epochs
 
 
 def get_output_subdir(analysis_file: str) -> str:
     subdir_name = analysis_file.replace(".py", "").replace("_", " ").title()
-    subdir_path = os.path.join(OUTPUT_DIR, subdir_name)
+    subdir_path = os.path.join(RESULTS_DIR, subdir_name)
     if not os.path.exists(subdir_path):
         os.makedirs(subdir_path, exist_ok=True)
     return subdir_path

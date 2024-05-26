@@ -11,7 +11,7 @@ import TAV.tav_helpers as tavh
 from TAV.Subject import Subject
 
 _OUTPUT_DIR = tavh.get_output_subdir(os.path.basename(__file__))
-_FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.FIGURES_STR)
+_FIGURES_DIR = os.path.join(_OUTPUT_DIR, tavh.constants.FIGURES_STR)
 
 _MAX_DIFF = 20  # maximum difference between GT and Pred event indices to consider them as matched
 
@@ -24,7 +24,7 @@ def load_or_calc_saccade_timing_differences():
     except FileNotFoundError:
         onset_diffs, offset_diffs = {}, {}
         for i in tqdm(range(101, 111), desc="Subjects"):
-            s = Subject.load_or_make(i, tavh.OUTPUT_DIR)
+            s = Subject.load_or_make(i, tavh.RESULTS_DIR)
             onset_diffs[i] = saccade_event_detection_sample_difference(s, "saccade_onset")
             # offset_diffs[i] = saccade_event_detection_sample_difference(s, "saccade_offset")
             offset_diffs[i] = np.array([])  # TODO: remove this when offset detection is implemented
@@ -77,7 +77,7 @@ def saccade_event_detection_sample_difference(
 
 
 def create_figure(sample_diffs: pd.Series, colormap: List[str] = None,) -> go.Figure:
-    colormap = colormap or tavh.DEFAULT_COLORMAP
+    colormap = colormap or tavh.constants.DEFAULT_COLORMAP
     fig = go.Figure()
     for i, evnt in enumerate(sample_diffs.index):
         event_diffs = sample_diffs[evnt]

@@ -13,9 +13,6 @@ import TAV.tav_helpers as tavh
 
 
 class Subject:
-    _BASE_PATH = r'C:\Users\nirjo\Desktop\TAV'
-    # _BASE_PATH = r'E:\Tav'
-
     _REFERENCE_CHANNEL = "Pz"
     _PLOTTING_CHANNEL = "O2"
 
@@ -46,7 +43,7 @@ class Subject:
         self._reog_channel = self._calculate_radial_eog()
 
     @staticmethod
-    def load_or_make(idx: int, dir_path: str = tavh.OUTPUT_DIR) -> 'Subject':
+    def load_or_make(idx: int, dir_path: str = tavh.RESULTS_DIR) -> 'Subject':
         try:
             with open(os.path.join(dir_path, f"Subject_{idx}.pkl"), 'rb') as f:
                 loaded: Subject = pkl.load(f)
@@ -176,7 +173,7 @@ class Subject:
                                      is_et_saccade_channel[self._is_trial]])
         raw_object_info = mne.create_info(ch_names=['REOG', 'REOG_srp_filtered', 'ET_SACC'],
                                           ch_types=['eeg'] * 2 + ['stim'],
-                                          sfreq=tavh.SAMPLING_FREQUENCY)
+                                          sfreq=tavh.constants.SAMPLING_FREQUENCY)
         raw_object = mne.io.RawArray(data=raw_object_data, info=raw_object_info)
         events = mne.find_events(raw_object, stim_channel='ET_SACC')
         scalings = dict(eeg=5e2, stim=1e10)
@@ -195,21 +192,21 @@ class Subject:
 
     @staticmethod
     def __read_eeg_no_eyemovements(idx: int) -> np.ndarray:
-        fname = os.path.join(Subject._BASE_PATH, "data", f"S{idx}_data_interp.mat")
+        fname = os.path.join(tavh.DATA_DIR, f"S{idx}_data_interp.mat")
         eeg_no_eyemovements = read_mat(fname)['data']
         eeg_no_eyemovements = np.swapaxes(eeg_no_eyemovements, 0, 1)
         return eeg_no_eyemovements
 
     @staticmethod
     def __read_eeg_no_blinks(idx: int) -> np.ndarray:
-        fname = os.path.join(Subject._BASE_PATH, "data", f"S{idx}_data_ica_onlyBlinks.mat")
+        fname = os.path.join(tavh.DATA_DIR, f"S{idx}_data_ica_onlyBlinks.mat")
         eeg_no_blinks = read_mat(fname)['dat']
         eeg_no_blinks = np.swapaxes(eeg_no_blinks, 0, 1)
         return eeg_no_blinks
 
     @staticmethod
     def __read_channels_map(idx: int) -> Dict[str, int]:
-        fname = os.path.join(Subject._BASE_PATH, "data", f"{idx}_channels.csv")
+        fname = os.path.join(tavh.DATA_DIR, f"{idx}_channels.csv")
         df = pd.read_csv(fname, header=0, index_col=0)
         channels_series = df[df.columns[-1]]
         channels_dict = channels_series.to_dict()
@@ -217,7 +214,7 @@ class Subject:
 
     @staticmethod
     def __read_trial_data(idx: int) -> pd.DataFrame:
-        fname = os.path.join(Subject._BASE_PATH, "data", f"{idx}_info.csv")
+        fname = os.path.join(tavh.DATA_DIR, f"{idx}_info.csv")
         df = pd.read_csv(fname, header=0)
         return df
 

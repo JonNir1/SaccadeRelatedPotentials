@@ -178,7 +178,7 @@ def _create_mean_performance_figure(stats: List[pd.DataFrame]) -> go.Figure:
 def load_or_calc_saccade_onset():
     event_name = "saccade_onset"
     event_dir = os.path.join(_OUTPUT_DIR, event_name)
-    event_figures_dir = os.path.join(event_dir, tavh.FIGURES_STR)
+    event_figures_dir = os.path.join(event_dir, tavh.constants.FIGURES_STR)
     os.makedirs(event_figures_dir, exist_ok=True)
     try:
         with open(os.path.join(event_dir, "subject_stats.pkl"), 'rb') as f:
