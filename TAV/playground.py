@@ -54,7 +54,7 @@ start = time.time()
 import TAV.peri_saccade as peri_saccade
 
 output_dir = os.path.join(r"C:\Users\nirjo\Desktop\SRP", "peri_saccade_data")
-os.makedirs(output_dir)
+os.makedirs(output_dir, exist_ok=True)
 
 for idx in tqdm(range(101, 111)):
     s = Subject.load_or_make(idx, tavh.RESULTS_DIR)
@@ -77,7 +77,7 @@ for idx in tqdm(range(101, 111)):
     path = os.path.join(output_dir, f"s{idx}")
     os.makedirs(path, exist_ok=True)
     for key, df in tqdm(both.items()):
-        if df is not None and not np.isnan(df):
+        if df is not None and not np.isnan(df).all().all():
             fname = "_".join(key) + ".csv"
             df.to_csv(os.path.join(path, fname))
     # todo: save as matlab struct
