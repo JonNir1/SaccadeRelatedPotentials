@@ -39,9 +39,45 @@ import TAV.timing_differences as time_diffs
 diffs, _, _ = time_diffs.load_or_calc_saccade_timing_differences()
 
 # %%
+#################################
 # Peri-Saccades
 import TAV.peri_saccade as peri_saccade
 subject_epochs, _, _ = peri_saccade.load_or_calc()
+
+# %%
+#################################
+# saccade epochs by direction
+import TAV.peri_saccade as peri_saccade
+
+output_dir = os.path.join(r"C:\Users\nirjo\Desktop\SRP", "peri_saccade_data")
+os.makedirs(output_dir)
+
+for idx in tqdm(range(101, 111)):
+    s = Subject.load_or_make(idx, tavh.RESULTS_DIR)
+    azimuth = s.get_saccade_feature("azimuth", enforce_trials=True)
+    is_rightwards = (-90 <= azimuth) & (azimuth < 90)
+    epochs = peri_saccade.load_or_calc_epochs(s)
+    right_epochs = epochs.map(lambda cell: cell[is_rightwards] if cell is pd.DataFrame else cell)
+    left_epochs = epochs.map(lambda cell: cell[~is_rightwards] if cell is pd.DataFrame else cell)
+    left = {
+        ("left", event, channel): channel_values
+        for event, event_values in left_epochs.to_dict().items()
+        for channel, channel_values in event_values.items()
+    }
+    right = {
+        ("right", event, channel): channel_values
+        for event, event_values in right_epochs.to_dict().items()
+        for channel, channel_values in event_values.items()
+    }
+    both = {**left, **right}
+    for key, df in tqdm(both.items()):
+        fname = "_".join(key) + ".csv"
+        df.to_csv(os.path.join(output_dir, fname))
+    # todo: save as matlab struct
+    break
+
+del azimuth, is_rightwards, epochs
+
 
 # %%
 #################################
