@@ -152,6 +152,8 @@ class Subject:
             col_name = "sac_angle"
         elif feature == "amplitude":
             col_name = "sac_amplitude"
+        elif feature == "duration":
+            col_name = "SacDur"
         elif feature in {"vmax", "peak_velocity"}:
             col_name = "sac_vmax"
         else:
