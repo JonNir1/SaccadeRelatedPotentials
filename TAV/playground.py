@@ -1,4 +1,5 @@
 import os
+import time
 import warnings
 from typing import List
 from collections import Counter
@@ -47,6 +48,9 @@ subject_epochs, _, _ = peri_saccade.load_or_calc()
 # %%
 #################################
 # saccade epochs by direction
+
+start = time.time()
+
 import TAV.peri_saccade as peri_saccade
 
 output_dir = os.path.join(r"C:\Users\nirjo\Desktop\SRP", "peri_saccade_data")
@@ -70,14 +74,17 @@ for idx in tqdm(range(101, 111)):
         for channel, channel_values in event_values.items()
     }
     both = {**left, **right}
+    path = os.path.join(output_dir, f"s{idx}")
+    os.makedirs(path, exist_ok=True)
     for key, df in tqdm(both.items()):
-        fname = "_".join(key) + ".csv"
-        df.to_csv(os.path.join(output_dir, fname))
+        if df is not None and not np.isnan(df):
+            fname = "_".join(key) + ".csv"
+            df.to_csv(os.path.join(path, fname))
     # todo: save as matlab struct
-    break
 
-del azimuth, is_rightwards, epochs
+del azimuth, is_rightwards, epochs, left_epochs, right_epochs, left, right, both, path, fname
 
+elapsed = time.time() - start
 
 # %%
 #################################
