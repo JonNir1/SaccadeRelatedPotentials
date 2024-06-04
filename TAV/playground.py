@@ -51,12 +51,6 @@ epochs, _ = saccade_epochs.load_or_calc()
 
 # %%
 #################################
-# Peri-Saccades
-import TAV.peri_saccade as peri_saccade
-subject_epochs, _, _ = peri_saccade.load_or_calc()
-
-# %%
-#################################
 # Check how many ERPs exist and how many are during trials
 
 idx = 101
