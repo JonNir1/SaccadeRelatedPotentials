@@ -16,6 +16,7 @@ EVENT_STR, EVENTS_STR = "event", "events"
 DURATION_STR = "duration"
 AMPLITUDE_STR = "amplitude"
 SACCADE_STR = "saccade"
+SUBJECT_STR = "subject"
 ONSET_STR = "onset"
 OFFSET_STR = "offset"
 
