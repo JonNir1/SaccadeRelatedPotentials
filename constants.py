@@ -8,11 +8,16 @@ import plotly.express as px
 
 DATA_STR = "data"
 RESULTS_STR = "results"
-FIGURES_STR = "Figures"
-EPOCHS_STR = "Epochs"
-SAMPLES_STR = "Samples"
-CHANNELS_STR = "Channels"
-EVENTS_STR = "Events"
+FIGURES_STR = "figures"
+EPOCH_STR, EPOCHS_STR = "epoch", "epochs"
+SAMPLE_STR, SAMPLES_STR = "sample", "samples"
+CHANNEL_STR, CHANNELS_STR = "channel", "channels"
+EVENT_STR, EVENTS_STR = "event", "events"
+DURATION_STR = "duration"
+AMPLITUDE_STR = "amplitude"
+SACCADE_STR = "saccade"
+ONSET_STR = "onset"
+OFFSET_STR = "offset"
 
 ####################
 #  OTHER CONSTANTS #
