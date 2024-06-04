@@ -114,11 +114,11 @@ def extract_epochs(
     padded_channel = np.pad(channel, (pad_before, pad_after), constant_values=np.nan)
     # extract epochs
     start_indices = event_indices - n_samples_before
-    end_indices = event_indices + n_samples_after
+    end_indices = event_indices + n_samples_after + 1
     epochs = np.array([padded_channel[start: end] for start, end in zip(start_indices, end_indices)])
     # store as DataFrame
     epochs = pd.DataFrame(
-        epochs, index=np.arange(epochs.shape[0]), columns=np.arange(-n_samples_before, n_samples_after)
+        epochs, index=np.arange(epochs.shape[0]), columns=np.arange(-n_samples_before, n_samples_after + 1)
     )
     epochs.index.name = constants.EPOCHS_STR
     epochs.columns.name = constants.SAMPLES_STR
