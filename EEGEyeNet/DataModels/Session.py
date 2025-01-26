@@ -184,7 +184,7 @@ class DotsSession(BaseSession):
         self._session_num = session_num
 
     @staticmethod
-    def from_mat_file(path: str) -> "BaseSession":
+    def from_mat_file(path: str) -> "DotsSession":
         # TODO: implement this method
 
         mat = read_mat(path)['sEEG']
