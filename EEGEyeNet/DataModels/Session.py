@@ -1,3 +1,4 @@
+import os.path
 from abc import ABC, abstractmethod
 from typing import final, Dict
 from enum import StrEnum, IntEnum
@@ -6,6 +7,7 @@ import numpy as np
 import pandas as pd
 from pymatreader import read_mat
 
+from utils.array_utils import to_vector
 from utils.calc_utils import calculate_sampling_rate
 
 
@@ -47,7 +49,7 @@ class BaseSession(ABC):
             channel_locations: pd.DataFrame,
             reference: str = "average"
     ):
-        self._subject = subject.strip().capitalize()
+        self._subject = subject.strip().upper()
         self._data = data
         self._timestamps = timestamps
         self._reference = reference.strip().lower()
@@ -74,17 +76,17 @@ class BaseSession(ABC):
     @final
     @property
     def num_channels(self) -> int:
-        raise self._data.shape[0]
+        return self._data.shape[0]
 
     @final
     @property
     def num_samples(self) -> int:
-        raise self._data.shape[1]
+        return self._data.shape[1]
 
     @final
     @property
     def sampling_rate(self) -> float:
-        raise self._sr
+        return self._sr
 
     @final
     @property
@@ -169,6 +171,7 @@ class BaseSession(ABC):
 
 class DotsSession(BaseSession):
     _TASK_TYPE = SessionTaskType.DOTS
+    __GRID_PREFIX_STR: str = "grid_"
 
     def __init__(
             self,
@@ -185,28 +188,53 @@ class DotsSession(BaseSession):
 
     @staticmethod
     def from_mat_file(path: str) -> "DotsSession":
-        # TODO: implement this method
-
         mat = read_mat(path)['sEEG']
 
+        # extract metadata from path
+        basename = os.path.basename(path)   # example: EP12_DOTS5_EEG.mat
+        subject_id = basename.split("_")[0].capitalize()
+        session_num = int(basename.split("_")[1][-1])
+
+        # load metadata from mat file
         num_channels = mat['nbchan']
         num_samples = mat['pnts']
         sampling_rate = mat['srate']
-        xmin, xmax = mat['xmin'], mat['xmax']
+        xmin, xmax = mat['xmin'], mat['xmax']   # not sure what these are for
+        ref = mat['ref'].strip().lower()
+        ref = "average" if ref == "averef" else ref
 
-        timestamps = mat['times']       # TODO: verify shape + sampling rate
-        data = mat['data']  # channel data: num_channels x num_samples  # TODO: verify shape
+        # load timestamps and verify inputs
+        timestamps = to_vector(mat['times'])    # timestamps in milliseconds: 1 x num_samples
+        if timestamps.shape[0] != num_samples:
+            raise AssertionError(f"Number of samples in timestamps ({timestamps.shape[0]}) must match metadata ({num_samples})")
+        _sr = calculate_sampling_rate(timestamps, decimals=3)
+        if not np.isclose(_sr, sampling_rate):
+            raise AssertionError(f"Sampling rate calculated from timestamps ({_sr}) must match metadata ({sampling_rate})")
 
-        # clean gaze data       # TODO: verify cleaning
-        gaze_data = data[129:]  # gaze data: 4 x num_samples (t, x, y, pupil) -> ignore t from this channel, use timestamps
+        # load channel data and verify inputs
+        data = mat['data']  # channel data: num_channels x num_samples
+        if data.shape[0] != num_channels:
+            raise AssertionError(f"Number of channels in data ({data.shape[0]}) must match metadata ({num_channels})")
+        if data.shape[1] != num_samples:
+            raise AssertionError(f"Number of samples in data ({data.shape[1]}) must match metadata ({num_samples})")
+
+        # clean gaze data - if X, Y, and Pupil are all 0, replace with NaN
         is_missing_gaze_data = np.all(data[130:] <= 0, axis=0)
         data[130:, is_missing_gaze_data] = np.nan
 
+        # load events (triggers & ET events) into DataFrames
         events = DotsSession._events_from_dict(mat['event'])
+        _grid_num = int((events['type'][
+            events['type'].map(lambda val: str(val).startswith(DotsSession.__GRID_PREFIX_STR))
+        ].iloc[0])[-1])
+        if _grid_num != session_num:
+            raise AssertionError(f"Grid number in events ({_grid_num}) must match metadata ({session_num})")
+
+        # load channel locations into DataFrames
         channel_locs = DotsSession._channel_locations_from_dict(mat['chanlocs'])
-        ref = mat['ref'].strip().lower()
-        ref = "average" if ref == "averef" else ref
-        raise NotImplementedError
+        if len(channel_locs.index) != num_channels:
+            raise AssertionError(f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
+        return DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
 
 
     @property
@@ -219,14 +247,13 @@ class DotsSession(BaseSession):
         missing_columns = set(DotsSession._EVENT_COLUMNS) - set(events_df.columns)
         if missing_columns:
             raise ValueError(f"Missing columns in events DataFrame: {missing_columns}")
-        events_df = events_df.reindex(columns=DotsSession._EVENT_COLUMNS)
 
         # fill missing values with NaN
         for col in events_df.columns:
             if col in ['type', 'latency']:
                 # don't touch these columns
                 continue
-            events_df[col][events_df[col] <= 0] = np.nan
+            events_df.loc[events_df[col] <= 0, col] = np.nan
         # parse the "type" column
         events_df['old_type'] = events_df['type']
         events_df['type'] = DotsSession.__parse_event_types(events_df['type'])
@@ -240,7 +267,21 @@ class DotsSession(BaseSession):
         missing_columns = set(DotsSession._CHANNEL_LOCATION_COLUMNS) - set(channel_locs_df.columns)
         if missing_columns:
             raise ValueError(f"Missing columns in channel locations DataFrame: {missing_columns}")
-        channel_locs_df = channel_locs_df.reindex(columns=DotsSession._CHANNEL_LOCATION_COLUMNS)
+        channel_locs_df['labels'] = channel_locs_df['labels'].map(lambda val: val.strip())
+        channel_locs_df.loc[channel_locs_df['labels'] == 'TIME', 'labels'] = 'ET_TIME'
+
+        # parse channel types to MNE channel types
+        channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "ET_TIME" in lbl.upper()), 'type'] = 'eyegaze'
+        channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "GAZE" in lbl.upper()), 'type'] = 'eyegaze'
+        channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "AREA" in lbl.upper()), 'type'] = 'pupil'
+        is_eog = channel_locs_df['labels'].map(
+            lambda lbl: lbl.upper() in [f"E{i}" for i in range(125, 129)]  # E125-E128 are EOG channels     # TODO: verify this is correct
+        )
+        channel_locs_df.loc[is_eog, 'type'] = 'eog'
+        channel_locs_df['type'] = channel_locs_df['type'].map(
+            lambda val: str(val).strip().replace('[', '').replace(']', '')
+        ).map(lambda val: val if val else 'eeg')
+
         return channel_locs_df
 
     @staticmethod
@@ -258,7 +299,7 @@ class DotsSession(BaseSession):
             raise ValueError("Multiple grid number events found before first `block_on` event")
         gridnum_idx = events_preceding_blocks[is_gridnum_event].index.min()
         grid_number = int(event_type[gridnum_idx]) - 11     # grids 1-6 are labelled 12-17
-        event_type[gridnum_idx] = f"grid_{grid_number}"
+        event_type[gridnum_idx] = f"{DotsSession.__GRID_PREFIX_STR}{grid_number}"
         return event_type
 
     @staticmethod
