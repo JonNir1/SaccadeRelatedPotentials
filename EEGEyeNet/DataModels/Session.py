@@ -255,7 +255,7 @@ class DotsSession(BaseSession):
                 continue
             events_df.loc[events_df[col] <= 0, col] = np.nan
         # parse the "type" column
-        events_df['old_type'] = events_df['type']
+        events_df['orig_type'] = events_df['type']
         events_df['type'] = DotsSession.__parse_event_types(events_df['type'])
         # add "block" column: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
         events_df['block'] = DotsSession.__extract_block_type(events_df['type'])
