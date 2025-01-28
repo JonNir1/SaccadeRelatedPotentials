@@ -104,12 +104,24 @@ class DotsSession(BaseSession):
         if missing_columns:
             raise ValueError(f"Missing columns in events DataFrame: {missing_columns}")
 
+        # calculate end time for each event (including 0-duration events)
+        new_endtime = events_df['latency'] + events_df['duration']
+        is_zero_dur = events_df['duration'] == 0
+        new_endtime[~is_zero_dur] -= 1      # start count from zero so subtract 1 from end time
+        if not np.all(new_endtime[is_zero_dur] == events_df['latency'][is_zero_dur]):
+            raise ValueError("Error in calculating end time for zero-duration events")
+        orig_endtime = events_df['endtime']
+        if not np.all((orig_endtime[~is_zero_dur] == new_endtime[~is_zero_dur])):
+            raise ValueError("Error in calculating end time for non-zero events")
+        events_df['endtime'] = new_endtime
+
         # fill missing values with NaN
         for col in events_df.columns:
-            if col in ['type', 'latency']:
+            if col in ['type', 'latency', 'duration', 'endtime']:
                 # don't touch these columns
                 continue
             events_df.loc[events_df[col] <= 0, col] = np.nan
+
         # parse the "type" column
         events_df['orig_type'] = events_df['type']
         events_df['type'] = DotsSession.__parse_event_types(events_df['type'])
