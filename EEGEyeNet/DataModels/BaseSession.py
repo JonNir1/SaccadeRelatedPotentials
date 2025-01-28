@@ -5,7 +5,7 @@ from enum import StrEnum, IntEnum
 
 import numpy as np
 import pandas as pd
-from pymatreader import read_mat
+from mne.io import Raw
 
 from utils.array_utils import to_vector
 from utils.calc_utils import calculate_sampling_rate
@@ -57,6 +57,10 @@ class BaseSession(ABC):
     @staticmethod
     @abstractmethod
     def from_mat_file(path: str) -> "BaseSession":
+        raise NotImplementedError
+
+    @abstractmethod
+    def to_mne(self) -> Raw:
         raise NotImplementedError
 
     @final

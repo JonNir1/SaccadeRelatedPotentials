@@ -5,6 +5,7 @@ from enum import IntEnum
 import numpy as np
 import pandas as pd
 from pymatreader import read_mat
+from mne.io import Raw
 
 from EEGEyeNet.DataModels.BaseSession import BaseSession, SessionTaskType
 from utils.array_utils import to_vector
@@ -87,6 +88,9 @@ class DotsSession(BaseSession):
         if len(channel_locs.index) != num_channels:
             raise AssertionError(f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
         return DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
+
+    def to_mne(self) -> Raw:
+        return None
 
 
     @property
