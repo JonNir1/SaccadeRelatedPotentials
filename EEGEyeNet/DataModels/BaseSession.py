@@ -125,12 +125,12 @@ class BaseSession(ABC):
             if em == EyeMovementType.UNDEFINED:
                 continue
             is_em = events.loc[is_str_event, 'type'].map(lambda evnt: em.name.lower() in evnt.lower())
-            is_em_sample = np.any(
+            is_em_idx = np.any(
                 (gaze.index.to_numpy() >= events.loc[is_em.index[is_em], 'latency'].to_numpy()[:, None]) &
                 (gaze.index.to_numpy() <= events.loc[is_em.index[is_em], 'endtime'].to_numpy()[:, None]),
                 axis=0
             )
-            gaze.loc[is_em_sample, 'label'] = em
+            gaze.loc[is_em_idx, 'label'] = em
         return gaze
 
     @final
