@@ -17,6 +17,13 @@ class SessionTaskType(StrEnum):
     VISUAL_SEARCH = "visual_search"
 
 
+class EyeMovementType(IntEnum):
+    UNDEFINED = 0
+    FIXATION = 1
+    SACCADE = 2
+    BLINK = 5
+
+
 class BaseSession(ABC):
 
     _TASK_TYPE: SessionTaskType
@@ -94,12 +101,37 @@ class BaseSession(ABC):
         return self.__class__._TASK_TYPE
 
     @final
+    def get_timestamps(self) -> np.ndarray:
+        return self._timestamps
+
+    @final
     def get_data(self) -> np.ndarray:
         return self._data
 
     @final
-    def get_timestamps(self) -> np.ndarray:
-        return self._timestamps
+    def get_gaze_data(self) -> pd.DataFrame:
+        # extract gaze data
+        ts = self.get_timestamps()
+        gaze = self._data[130:]
+        gaze = pd.DataFrame(
+            np.vstack((ts, gaze)).T, columns=['t', 'x', 'y', 'pupil']
+        ).sort_values('t').reset_index(drop=True)
+
+        # add label column for eye movement type
+        gaze['label'] = EyeMovementType.UNDEFINED
+        events = self.get_events()
+        is_str_event = events['type'].map(lambda x: isinstance(x, str))
+        for em in EyeMovementType:
+            if em == EyeMovementType.UNDEFINED:
+                continue
+            is_em = events.loc[is_str_event, 'type'].map(lambda evnt: em.name.lower() in evnt.lower())
+            is_em_sample = np.any(
+                (gaze.index.to_numpy() >= events.loc[is_em.index[is_em], 'latency'].to_numpy()[:, None]) &
+                (gaze.index.to_numpy() <= events.loc[is_em.index[is_em], 'endtime'].to_numpy()[:, None]),
+                axis=0
+            )
+            gaze.loc[is_em_sample, 'label'] = em
+        return gaze
 
     @final
     def get_events(self) -> pd.DataFrame:
