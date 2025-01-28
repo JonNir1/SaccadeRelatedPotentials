@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Sequence
+from typing import Dict, Union
 from enum import IntEnum
 
 import numpy as np
@@ -89,10 +89,6 @@ class DotsSession(BaseSession):
             raise AssertionError(f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
         return DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
 
-    def to_mne(self) -> Raw:
-        return None
-
-
     @property
     def session_num(self) -> int:
         return self._session_num
@@ -158,7 +154,11 @@ class DotsSession(BaseSession):
 
     @staticmethod
     def __parse_event_types(event_type: pd.Series) -> pd.Series:
-        event_type = event_type.map(lambda val: str(val).strip()).map(lambda val: int(val) if val.isnumeric() else val)
+        event_type = event_type.map(
+            lambda val: str(val).strip()
+        ).map(
+            lambda val: int(val) if val.isnumeric() else val
+        )
         event_type = event_type.replace({41: "stim_off", 55: "block_on", 56: "block_off"})
         block_on_idxs = event_type[event_type == "block_on"].index
 
