@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Union
+from typing import Dict
 from enum import IntEnum
 
 import numpy as np
@@ -26,15 +26,15 @@ class DotsSession(BaseSession):
     _TASK_TYPE = SessionTaskType.DOTS
     __GRID_PREFIX_STR: str = "grid_"
     __EVENTS_DICT = {
+        "stim_off": 41,
+        "block_on": 55,
+        "block_off": 56,
+
         "grid_1": 201,
         "grid_2": 202,
         "grid_3": 203,
         "grid_4": 204,
         "grid_5": 205,
-
-        "block_on": 207,
-        "block_off": 208,
-        "stim_off": 209,
 
         "L_fixation": 211,
         "R_fixation": 212,
@@ -107,15 +107,30 @@ class DotsSession(BaseSession):
             raise AssertionError(f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
         return DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
 
-    def to_mne(self, verbose: bool = False) -> (mne.io.RawArray, Dict[int, Union[int, str]]):
-        trigs, event_dict = DotsSession._events_df_to_channel(self._events, self.num_samples)
+    def to_mne(self, verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
+        et_trigs, ses_trigs, stim_trigs = DotsSession._events_df_to_channel(self._events, self.num_samples)
+
+        # create mapping from event name to event code
+        event_dict = dict()
+        event_dict.update({k: np.uint(v) for k, v in DotsSession.__EVENTS_DICT.items()})
+        event_dict.update({f"stim_{val}": val for val in np.unique(stim_trigs) if val != 0})
+        if not all(np.isin(np.unique(et_trigs[et_trigs != 0]), list(event_dict.values()))):
+            raise AssertionError("Unexpected event code in ET triggers")
+        if not all(np.isin(np.unique(ses_trigs[ses_trigs != 0]), list(event_dict.values()))):
+            raise AssertionError("Unexpected event code in session triggers")
+        if not all(np.isin(np.unique(stim_trigs[stim_trigs != 0]), list(event_dict.values()))):
+            raise AssertionError("Unexpected event code in stim triggers")
+
+        # create MNE RawArray object
         chanlocs = self.get_channel_locations()
         info = mne.create_info(
-            ch_names=chanlocs['labels'].tolist() + ['TRIGGER'],
-            ch_types=chanlocs['type'].tolist() + ['stim'],
+            ch_names=chanlocs['labels'].tolist() + ['TRIGGER_ET', 'TRIGGER_SES', 'TRIGGER_STIM'],
+            ch_types=chanlocs['type'].tolist() + ['stim', 'stim', 'stim'],
             sfreq=self.sampling_rate,
         )
-        raw = mne.io.RawArray(np.vstack((self.get_data(), trigs)), info, verbose=verbose)
+        raw = mne.io.RawArray(
+            np.vstack((self.get_data(), et_trigs, ses_trigs, stim_trigs)), info, verbose=verbose
+        )
         return raw, event_dict
 
     @property
@@ -184,7 +199,7 @@ class DotsSession(BaseSession):
     @staticmethod
     def _events_df_to_channel(
             events_df: pd.DataFrame, n_samples: int = None
-    ) -> (np.ndarray, Dict[int, Union[int, str]]):
+    ) -> (np.ndarray, np.ndarray, np.ndarray):
         if n_samples is None:
             n_samples = int(events_df['endtime'].max())
         if n_samples <= 0:
@@ -208,21 +223,35 @@ class DotsSession(BaseSession):
             raise AssertionError("Unexpected event type in events DataFrame")
 
         # populate the trigger channel
-        trigs = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
-        trigs_idxs = np.arange(n_samples)
+        et_trigs = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
+        ses_trigs = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
+        stim_trigs = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
+        et_evnt_codes = [
+            # ET events are encoded as 211-216
+            v for k, v in DotsSession.__EVENTS_DICT.items()
+            if "fixation" in k.lower() or "saccade" in k.lower() or "blink" in k.lower()
+        ]
+        session_evnt_codes = [
+            # Session events (stim_off, block_on, block_off, etc.) are encoded as 41, 55, 56, 201-205
+            v for k, v in DotsSession.__EVENTS_DICT.items()
+            if v not in et_evnt_codes
+        ]
         for evnt in new_events['type'].unique():
+            trigs_idxs = np.arange(n_samples)
             is_evnt = new_events['type'] == evnt
             is_event_idx = np.any(
                     (trigs_idxs >= new_events.loc[is_evnt, 'latency'].to_numpy()[:, None]) &
                     (trigs_idxs <= new_events.loc[is_evnt, 'endtime'].to_numpy()[:, None]),
                     axis=0
             )
-            trigs[is_event_idx] = np.uint8(evnt)
-
-        # create inverse mapping from event code to event name
-        inv_event_dict = {v: k for k, v in DotsSession.__EVENTS_DICT.items()}
-        inv_event_dict.update({v: v for v in new_events['type'].unique() if v not in inv_event_dict.keys()})
-        return trigs, inv_event_dict
+            # populate the correct trigger channel
+            if evnt in et_evnt_codes:
+                et_trigs[is_event_idx] = np.uint8(evnt)
+            elif evnt in session_evnt_codes:
+                ses_trigs[is_event_idx] = np.uint8(evnt)
+            else:
+                stim_trigs[is_event_idx] = np.uint8(evnt)
+        return et_trigs, ses_trigs, stim_trigs
 
     @staticmethod
     def __parse_event_types(event_type: pd.Series) -> pd.Series:
