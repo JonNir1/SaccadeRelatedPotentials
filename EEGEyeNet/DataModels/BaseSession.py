@@ -25,7 +25,6 @@ class EyeMovementType(IntEnum):
 
 
 class BaseSession(ABC):
-
     _TASK_TYPE: SessionTaskType
     _EVENT_COLUMNS = [
         'type', 'latency', 'duration', 'endtime',
@@ -147,6 +146,11 @@ class BaseSession(ABC):
         return chan_locs.labels
 
     @final
+    def get_channel_types(self) -> np.ndarray:
+        chan_locs = self.get_channel_locations()
+        return chan_locs.types
+
+    @final
     def _verify_events_input(self, events: pd.DataFrame):
         missing_columns = set(self._EVENT_COLUMNS) - set(events.columns)
         if missing_columns:
@@ -193,4 +197,3 @@ class BaseSession(ABC):
     @final
     def __str__(self):
         return self.__repr__()
-
