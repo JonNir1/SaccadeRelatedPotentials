@@ -1,5 +1,5 @@
 import os
-from typing import Dict
+from typing import Dict, Sequence
 from enum import IntEnum
 
 import numpy as np
@@ -138,6 +138,10 @@ class DotsSession(BaseSession):
             lambda val: str(val).strip().replace('[', '').replace(']', '')
         ).map(lambda val: val if val else 'eeg')
 
+        # replace empty array cells with NaN
+        channel_locs_df = channel_locs_df.map(
+            lambda val: np.nan if isinstance(val, np.ndarray) and len(val) == 0 else val
+        )
         return channel_locs_df
 
     @staticmethod
