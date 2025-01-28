@@ -21,4 +21,12 @@ data = ses.get_data()
 gaze_data = ses.get_gaze_data()
 locs = ses.get_channel_locations()
 events = ses.get_events()
-raw = ses.to_mne()
+raw, event_dict = ses.to_mne()
+
+mne_events_et = mne.find_events(raw, stim_channel="TRIGGER_ET", output='onset', shortest_event=1, consecutive=True)
+mne_events_ses = mne.find_events(raw, stim_channel="TRIGGER_SES", output='onset', shortest_event=1, consecutive=True)
+mne_events_stim = mne.find_events(raw, stim_channel="TRIGGER_STIM", output='onset', shortest_event=1, consecutive=True)
+
+fig = mne.viz.plot_events(
+    mne_events_ses, sfreq=raw.info['sfreq'], event_id=event_dict, first_samp=raw.first_samp, on_missing='ignore',
+)
