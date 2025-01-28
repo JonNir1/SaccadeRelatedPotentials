@@ -4,8 +4,8 @@ from enum import IntEnum
 
 import numpy as np
 import pandas as pd
+import mne
 from pymatreader import read_mat
-from mne.io import Raw
 
 from EEGEyeNet.DataModels.BaseSession import BaseSession, SessionTaskType
 from utils.array_utils import to_vector
@@ -25,6 +25,24 @@ class DotsBlockTaskType(IntEnum):
 class DotsSession(BaseSession):
     _TASK_TYPE = SessionTaskType.DOTS
     __GRID_PREFIX_STR: str = "grid_"
+    __EVENTS_DICT = {
+        "grid_1": 201,
+        "grid_2": 202,
+        "grid_3": 203,
+        "grid_4": 204,
+        "grid_5": 205,
+
+        "block_on": 207,
+        "block_off": 208,
+        "stim_off": 209,
+
+        "L_fixation": 211,
+        "R_fixation": 212,
+        "L_saccade": 213,
+        "R_saccade": 214,
+        "L_blink": 215,
+        "R_blink": 216,
+    }
 
     def __init__(
             self,
@@ -89,6 +107,17 @@ class DotsSession(BaseSession):
             raise AssertionError(f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
         return DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
 
+    def to_mne(self, verbose: bool = False) -> (mne.io.RawArray, Dict[int, Union[int, str]]):
+        trigs, event_dict = DotsSession._events_df_to_channel(self._events, self.num_samples)
+        chanlocs = self.get_channel_locations()
+        info = mne.create_info(
+            ch_names=chanlocs['labels'].tolist() + ['TRIGGER'],
+            ch_types=chanlocs['type'].tolist() + ['stim'],
+            sfreq=self.sampling_rate,
+        )
+        raw = mne.io.RawArray(np.vstack((self.get_data(), trigs)), info, verbose=verbose)
+        return raw, event_dict
+
     @property
     def session_num(self) -> int:
         return self._session_num
@@ -151,6 +180,49 @@ class DotsSession(BaseSession):
             lambda val: np.nan if isinstance(val, np.ndarray) and len(val) == 0 else val
         )
         return channel_locs_df
+
+    @staticmethod
+    def _events_df_to_channel(
+            events_df: pd.DataFrame, n_samples: int = None
+    ) -> (np.ndarray, Dict[int, Union[int, str]]):
+        if n_samples is None:
+            n_samples = int(events_df['endtime'].max())
+        if n_samples <= 0:
+            raise ValueError("n_samples must be a positive integer")
+        is_zero_duration = events_df['duration'] == 0
+        is_string_event_type = events_df['type'].map(lambda x: isinstance(x, str))
+        non_zero_string_events = events_df.loc[~is_zero_duration & is_string_event_type]
+        is_valid = non_zero_string_events['type'].map(
+            lambda typ: "fixation" in typ.lower() or "saccade" in typ.lower() or "blink" in typ.lower()
+        ).all()
+        if not is_valid:
+            raise AssertionError("Unexpected event type in events DataFrame")
+
+        # replace the 'type' column with integer codes
+        new_events = events_df.copy().sort_values('latency')
+        new_events['type'] = new_events['type'].map(
+            lambda typ: typ if type(typ) in [int, float, np.uint] else DotsSession.__EVENTS_DICT.get(typ, np.nan)
+        )
+        is_nan = new_events['type'].isna().any()
+        if is_nan:
+            raise AssertionError("Unexpected event type in events DataFrame")
+
+        # populate the trigger channel
+        trigs = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
+        trigs_idxs = np.arange(n_samples)
+        for evnt in new_events['type'].unique():
+            is_evnt = new_events['type'] == evnt
+            is_event_idx = np.any(
+                    (trigs_idxs >= new_events.loc[is_evnt, 'latency'].to_numpy()[:, None]) &
+                    (trigs_idxs <= new_events.loc[is_evnt, 'endtime'].to_numpy()[:, None]),
+                    axis=0
+            )
+            trigs[is_event_idx] = np.uint8(evnt)
+
+        # create inverse mapping from event code to event name
+        inv_event_dict = {v: k for k, v in DotsSession.__EVENTS_DICT.items()}
+        inv_event_dict.update({v: v for v in new_events['type'].unique() if v not in inv_event_dict.keys()})
+        return trigs, inv_event_dict
 
     @staticmethod
     def __parse_event_types(event_type: pd.Series) -> pd.Series:

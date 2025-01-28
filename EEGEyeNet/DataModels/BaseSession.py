@@ -1,6 +1,6 @@
 import os.path
 from abc import ABC, abstractmethod
-from typing import final, Dict
+from typing import final, Dict, Union
 from enum import StrEnum, IntEnum
 
 import numpy as np
@@ -66,7 +66,14 @@ class BaseSession(ABC):
         raise NotImplementedError
 
     @abstractmethod
-    def to_mne(self) -> Raw:
+    def to_mne(self) -> (Raw, Dict[int, Union[int, str]]):
+        """
+        Convert the session data to an MNE Raw object, and return it along with a dictionary mapping event trigger
+        values to event names.
+        :return:
+            raw: MNE Raw object
+            event_dict: Dictionary mapping event trigger values to event names
+        """
         raise NotImplementedError
 
     @final
@@ -144,11 +151,6 @@ class BaseSession(ABC):
     def get_channel_labels(self) -> np.ndarray:
         chan_locs = self.get_channel_locations()
         return chan_locs.labels
-
-    @final
-    def get_channel_types(self) -> np.ndarray:
-        chan_locs = self.get_channel_locations()
-        return chan_locs.types
 
     @final
     def _verify_events_input(self, events: pd.DataFrame):
