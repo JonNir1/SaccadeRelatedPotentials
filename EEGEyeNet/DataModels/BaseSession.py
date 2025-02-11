@@ -164,6 +164,13 @@ class BaseSession(ABC):
 
     @final
     def get_gaze_data(self) -> pd.DataFrame:
+        """
+        Extracts the gaze data from relevant channels (X: 130, Y: 131, Pupil: 132), along with the EEG timestamps
+        (discarding the ET timestamps). Also computes the sample-by-sample label based on the ET events.
+
+        :return: a pd.DataFrame of shape 5×N, where N is the number of samples in the session, and rows are `t`, `x`,
+            `y`, `pupil`, and `label`.
+        """
         # extract gaze data
         ts = self.get_timestamps()
         gaze = self._data[130:]
@@ -185,7 +192,7 @@ class BaseSession(ABC):
                 axis=0
             )
             gaze.loc[is_em_idx, 'label'] = em
-        return gaze
+        return gaze.T
 
     @final
     def get_events(self) -> pd.DataFrame:
