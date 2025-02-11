@@ -123,13 +123,14 @@ class DotsSession(BaseSession):
 
         # create MNE RawArray object
         chanlocs = self.get_channel_locations()
+        eog_data = self.get_eog_data(reog_ref=None).iloc[1:]     # exclude the TIME channel
         info = mne.create_info(
-            ch_names=chanlocs['labels'].tolist() + ['STI_ET', 'STI_SES', 'STI_DOT'],
-            ch_types=chanlocs['type'].tolist() + ['stim', 'stim', 'stim'],
+            ch_names=chanlocs['labels'].tolist() + [f"{ch.upper()}_EOG" for ch in eog_data.index] + ['STI_ET', 'STI_SES', 'STI_DOT'],
+            ch_types=chanlocs['type'].tolist() + ['eog' for _ in eog_data.index] + ['stim', 'stim', 'stim'],
             sfreq=self.sampling_rate,
         )
         raw = mne.io.RawArray(
-            np.vstack((self.get_data(), et_triggers, ses_triggers, dot_triggers)),
+            np.vstack((self.get_data(), eog_data.values, et_triggers, ses_triggers, dot_triggers)),
             info,
             verbose=verbose
         )
