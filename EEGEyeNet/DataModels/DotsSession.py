@@ -108,28 +108,28 @@ class DotsSession(BaseSession):
         return DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
 
     def to_mne(self, verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
-        et_trigs, ses_trigs, stim_trigs = DotsSession._events_df_to_channel(self._events, self.num_samples)
+        et_triggers, ses_triggers, dot_triggers = DotsSession._events_df_to_channel(self._events, self.num_samples)
 
         # create mapping from event name to event code
         event_dict = dict()
         event_dict.update({k: np.uint(v) for k, v in DotsSession.__EVENTS_DICT.items()})
-        event_dict.update({f"stim_{val}": val for val in np.unique(stim_trigs) if val != 0})
-        if not all(np.isin(np.unique(et_trigs[et_trigs != 0]), list(event_dict.values()))):
+        event_dict.update({f"stim_{val}": val for val in np.unique(dot_triggers) if val != 0})
+        if not all(np.isin(np.unique(et_triggers[et_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in ET triggers")
-        if not all(np.isin(np.unique(ses_trigs[ses_trigs != 0]), list(event_dict.values()))):
+        if not all(np.isin(np.unique(ses_triggers[ses_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in session triggers")
-        if not all(np.isin(np.unique(stim_trigs[stim_trigs != 0]), list(event_dict.values()))):
+        if not all(np.isin(np.unique(dot_triggers[dot_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in stim triggers")
 
         # create MNE RawArray object
         chanlocs = self.get_channel_locations()
         info = mne.create_info(
-            ch_names=chanlocs['labels'].tolist() + ['TRIGGER_ET', 'TRIGGER_SES', 'TRIGGER_STIM'],
+            ch_names=chanlocs['labels'].tolist() + ['STI_ET', 'STI_SES', 'STI_DOT'],
             ch_types=chanlocs['type'].tolist() + ['stim', 'stim', 'stim'],
             sfreq=self.sampling_rate,
         )
         raw = mne.io.RawArray(
-            np.vstack((self.get_data(), et_trigs, ses_trigs, stim_trigs)),
+            np.vstack((self.get_data(), et_triggers, ses_triggers, dot_triggers)),
             info,
             verbose=verbose
         )
@@ -228,10 +228,10 @@ class DotsSession(BaseSession):
             {1: 1, 19: 1, 27: 1, 101: 101, 119: 101, 127: 101}
         )
 
-        # populate the trigger channel
-        et_trigs = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
-        ses_trigs = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
-        stim_trigs = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
+        # populate the trigger channels
+        et_triggers = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
+        ses_triggers = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
+        dot_triggers = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
         et_evnt_codes = [
             # ET events are encoded as 211-216
             v for k, v in DotsSession.__EVENTS_DICT.items()
@@ -252,12 +252,12 @@ class DotsSession(BaseSession):
             )
             # populate the correct trigger channel
             if evnt in et_evnt_codes:
-                et_trigs[is_event_idx] = np.uint8(evnt)
+                et_triggers[is_event_idx] = np.uint8(evnt)
             elif evnt in session_evnt_codes:
-                ses_trigs[is_event_idx] = np.uint8(evnt)
+                ses_triggers[is_event_idx] = np.uint8(evnt)
             else:
-                stim_trigs[is_event_idx] = np.uint8(evnt)
-        return et_trigs, ses_trigs, stim_trigs
+                dot_triggers[is_event_idx] = np.uint8(evnt)
+        return et_triggers, ses_triggers, dot_triggers
 
     @staticmethod
     def __parse_event_types(event_type: pd.Series) -> pd.Series:

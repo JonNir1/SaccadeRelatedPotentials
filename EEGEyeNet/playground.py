@@ -27,9 +27,9 @@ eog_reog = ses.get_eog_data(reog_ref='Pz')
 
 raw, event_dict = ses.to_mne()
 
-mne_events_et = mne.find_events(raw, stim_channel="TRIGGER_ET", output='onset', shortest_event=1, consecutive=True)
-mne_events_ses = mne.find_events(raw, stim_channel="TRIGGER_SES", output='onset', shortest_event=1, consecutive=True)
-mne_events_stim = mne.find_events(raw, stim_channel="TRIGGER_STIM", output='onset', shortest_event=1, consecutive=True)
+mne_events_et = mne.find_events(raw, stim_channel="STI_ET", output='onset', shortest_event=1, consecutive=True)
+mne_events_ses = mne.find_events(raw, stim_channel="STI_SES", output='onset', shortest_event=1, consecutive=True)
+mne_events_stim = mne.find_events(raw, stim_channel="STI_DOT", output='onset', shortest_event=1, consecutive=True)
 
 fig = mne.viz.plot_events(
     mne_events_ses, sfreq=raw.info['sfreq'], event_id=event_dict, first_samp=raw.first_samp, on_missing='ignore',
