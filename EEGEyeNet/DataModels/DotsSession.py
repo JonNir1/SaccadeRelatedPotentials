@@ -129,7 +129,9 @@ class DotsSession(BaseSession):
             sfreq=self.sampling_rate,
         )
         raw = mne.io.RawArray(
-            np.vstack((self.get_data(), et_trigs, ses_trigs, stim_trigs)), info, verbose=verbose
+            np.vstack((self.get_data(), et_trigs, ses_trigs, stim_trigs)),
+            info,
+            verbose=verbose
         )
         return raw, event_dict
 
