@@ -243,12 +243,12 @@ class DotsSession(BaseSession):
             v for k, v in DotsSession.__EVENTS_DICT.items()
             if (v not in et_evnt_codes) and (k != "stim_off")   # exclude stim_off (code 41)
         ]
+        idxs = np.arange(n_samples)
         for evnt in new_events['type'].unique():
-            trigs_idxs = np.arange(n_samples)
             is_evnt = new_events['type'] == evnt
             is_event_idx = np.any(
-                    (trigs_idxs >= new_events.loc[is_evnt, 'latency'].to_numpy()[:, None]) &
-                    (trigs_idxs <= new_events.loc[is_evnt, 'endtime'].to_numpy()[:, None]),
+                    (idxs >= new_events.loc[is_evnt, 'latency'].to_numpy()[:, None]) &
+                    (idxs <= new_events.loc[is_evnt, 'endtime'].to_numpy()[:, None]),
                     axis=0
             )
             # populate the correct trigger channel
