@@ -232,9 +232,9 @@ class DotsSession(BaseSession):
             if "fixation" in k.lower() or "saccade" in k.lower() or "blink" in k.lower()
         ]
         session_evnt_codes = [
-            # Session events (stim_off, block_on, block_off, etc.) are encoded as 41, 55, 56, 201-205
+            # Session events (block_on, block_off, etc.) are encoded as 55, 56, 201-205
             v for k, v in DotsSession.__EVENTS_DICT.items()
-            if v not in et_evnt_codes
+            if (v not in et_evnt_codes) and (k != "stim_off")   # exclude stim_off (code 41)
         ]
         for evnt in new_events['type'].unique():
             trigs_idxs = np.arange(n_samples)
