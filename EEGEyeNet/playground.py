@@ -34,3 +34,9 @@ mne_events_dot = mne.find_events(raw, stim_channel="STI_DOT", output='onset', sh
 fig = mne.viz.plot_events(
     mne_events_dot, sfreq=raw.info['sfreq'], event_id=event_dict, first_samp=raw.first_samp, on_missing='ignore',
 )
+
+
+#########################################
+# Contra-lateral Difference, following the analysis performed by Talcott et al., 2023 (https://doi.org/10.3758/s13414-023-02775-5)
+# TODO: check if N2pc is relative to current gaze or absolute to hemi-field
+# TODO: artifact/blink rejection or ICA?
