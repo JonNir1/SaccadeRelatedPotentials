@@ -1,6 +1,5 @@
-import os.path
 from abc import ABC, abstractmethod
-from typing import final, Dict, Union
+from typing import final, Dict, Union, Optional
 from enum import StrEnum, IntEnum
 
 import numpy as np
@@ -113,6 +112,55 @@ class BaseSession(ABC):
     @final
     def get_data(self) -> np.ndarray:
         return self._data
+
+    @final
+    def get_eog_data(self, reog_ref: Optional[str] =None) -> pd.DataFrame:
+        """
+        Calculates EOG data for the left/right vertical and horizontal difference of relevant EEG electrodes from the
+        EGI-128 electrode system, bsed on the settings used by Jia & Tyler, 2019
+        (https://doi.org/10.3758/s13428-019-01280-8).
+        Additionally, if `reog_ref` is not None, calculates the radial EOG by taking the mean of the four EOG channels
+        and subtracting the ref electrode, which should be a central electrode, as was done by
+        Keren, Yuval-Grinberg & Deouell, 2010 (https://doi.org/10.1016/j.neuroimage.2009.10.057).
+
+        EOG electrodes used (from Jia & Tyler, 2019):
+            - left vertical: E5 - E127 (top - bottom)
+            - left horizontal: E32 - E17 (Left - Medial; rightwards)
+            - right vertical: E8 - E126
+            - right horizontal: E1 - E17 (Right - Medial; leftwards)
+        REOG reference electrodes:
+            - Cz: channel `Cz` in the EEGEyeNet recordings using EGI-128 system
+            - Pz: channel `E62` in the EEGEyeNet recordings using EGI-128 system
+            - Oz: channel `E75` in the EEGEyeNet recordings using EGI-128 system
+
+        :param reog_ref: Reference electrode for radial EOG calculation, or None if rEOG should not be calculated.
+
+        :return: a pd.DataFrame of shape 5×N or 6×N:
+            - N is the number of samples (columns)
+            - rows are `t` (timestamps), `lv`, `lh`, `rv`, `rh`, and `reog` (if `reog_ref` is not None)
+        """
+        data = self.get_data()
+        channel_labels = self.get_channel_labels()
+        ts = pd.Series(self.get_timestamps(), name='t')
+        lv = pd.Series((data[channel_labels == 'E5'] - data[channel_labels == 'E127']).flatten(), name='lv')
+        lh = pd.Series((data[channel_labels == 'E32'] - data[channel_labels == 'E17']).flatten(), name='lh')
+        rv = pd.Series((data[channel_labels == 'E8'] - data[channel_labels == 'E126']).flatten(), name='rv')
+        rh = pd.Series((data[channel_labels == 'E1'] - data[channel_labels == 'E17']).flatten(), name='rh')
+        eog = pd.concat([ts, lv, lh, rv, rh], axis=1).T
+        if reog_ref is None:
+            return eog
+
+        if reog_ref.lower() in {'cz'}:
+            reog_ref = 'Cz'
+        elif reog_ref.lower() in {'pz', 'E62'}:
+            reog_ref = 'E62'
+        elif reog_ref.lower() in {'oz', 'E75'}:
+            reog_ref = 'E75'
+        else:
+            raise ValueError(f"Invalid reog_ref: {reog_ref}")
+        # TODO: verify we don't need to flip the directions of some EOG channels
+        reog = pd.Series(np.mean(eog.iloc[1:4], axis=0) - data[channel_labels == reog_ref].flatten(), name='reog')
+        return pd.concat([eog.T, reog], axis=1).T
 
     @final
     def get_gaze_data(self) -> pd.DataFrame:
