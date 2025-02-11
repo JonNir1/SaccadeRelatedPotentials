@@ -221,6 +221,10 @@ class DotsSession(BaseSession):
         is_nan = new_events['type'].isna().any()
         if is_nan:
             raise AssertionError("Unexpected event type in events DataFrame")
+        new_events['type'] = new_events['type'].replace(
+            # replace events "19" and "27" with "1"; and "119" and "127" with "101" - all represent the middle dot
+            {1: 1, 19: 1, 27: 1, 101: 101, 119: 101, 127: 101}
+        )
 
         # populate the trigger channel
         et_trigs = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
