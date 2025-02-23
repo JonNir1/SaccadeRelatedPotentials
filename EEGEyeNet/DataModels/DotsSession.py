@@ -1,5 +1,5 @@
 import os
-from typing import Dict, Union
+from typing import Dict, Tuple, Union
 from enum import IntEnum
 
 import numpy as np
@@ -39,6 +39,17 @@ class DotsSession(BaseSession):
         "R_saccade": 214,
         "L_blink": 215,
         "R_blink": 216,
+    }
+    __ORIGINAL_TARGET_LOCATIONS: Dict[int, Tuple[int, int]] = {
+        # dot locations specified in EEGEyeNet's OSF appendix on experimental paradigms (https://osf.io/ktv7m/)
+        # IMPORTANT NOTE: the (x,y) coordinates follow Matlab convention, so bottom-left is (0,0) and top-right is (800,600)
+        1: (400, 300),  # middle
+        2: (650, 500), 3: (400, 100), 4: (100, 450), 5: (700, 450), 6: (100, 500), 7: (200, 350), 8: (300, 400),
+        9: (100, 150), 10: (150, 500), 11: (150, 100), 12: (700, 100), 13: (300, 200), 14: (100, 100), 15: (700, 500),
+        16: (500, 400), 17: (600, 250), 18: (650, 100),
+        19: (400, 300),  # middle
+        20: (200, 250), 21: (400, 500), 22: (700, 150), 23: (500, 200), 24: (100, 300), 25: (700, 300), 26: (600, 350),
+        27: (400, 300),  # middle
     }
 
     def __init__(
