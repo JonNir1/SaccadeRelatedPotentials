@@ -123,6 +123,59 @@ class DotsSession(BaseSession):
         return self._session_num
 
     @staticmethod
+    def get_dot_locations(block: Union[DotsBlockTaskType, int, str]) -> pd.DataFrame:
+        """
+        Get the target locations in Python coordinates (origin at top-left) for a given block number.
+        Blocks follow the order: 1=basic -> 2=reversed -> 3=mirrored -> 4=reversed_mirrored -> 5=basic2. Other block
+        types raise a ValueError.
+        TECHNICAL NOTE: EEGEyeNet uses a 800x600 screen resolution
+
+        :param block: the block type (DotsBlockTaskType), its code (int), or its name (str)
+        :returns: a DataFrame is indexed by dot appearance and contains the following columns:
+            - 'x' and 'y' representing the horizontal and vertical coordinates (Python standard), respectively.
+            - 'angle2center' representing the angle in degrees from the center of the screen (N=0, W=90, S=180, E=-90).
+            - 'pixel_distance' representing the distance from the previous dot in pixels.
+            - 'azimuth' representing the angle in degrees from the previous dot (N=0, W=90, S=180, E=-90).
+        """
+        if isinstance(block, str):
+            block = DotsBlockTaskType[block.upper().strip()]
+        elif isinstance(block, int):
+            block = DotsBlockTaskType(block)
+        if not isinstance(block, DotsBlockTaskType):
+            raise TypeError("block must be a DotsBlockTaskType, its code (int 1-5), or its name (str)")
+        if block == DotsBlockTaskType.OUT_OF_BLOCK:
+            raise ValueError("Cannot get dot locations for OUT_OF_BLOCK block type")
+
+        # get dot locations based on the block type
+        base_locations = pd.DataFrame(DotsSession.__ORIGINAL_TARGET_LOCATIONS).T
+        base_locations.columns = ['x', 'y']
+        base_locations['y'] = 600 - base_locations['y']  # convert to Python coordinates, origin at top-left
+        if block == DotsBlockTaskType.BASIC or block == DotsBlockTaskType.BASIC2:
+            locations = base_locations
+        elif block == DotsBlockTaskType.REVERSED:
+            locations = base_locations.iloc[::-1].reset_index(drop=True)
+        elif block == DotsBlockTaskType.MIRRORED:
+            locations = base_locations.copy()
+            locations['x'] = 800 - locations['x']
+            locations['y'] = 600 - locations['y']
+        elif block == DotsBlockTaskType.REVERSED_MIRRORED:
+            locations = base_locations.iloc[::-1].reset_index(drop=True)
+            locations['x'] = 800 - locations['x']
+            locations['y'] = 600 - locations['y']
+        else:
+            raise ValueError(f"Unexpected block type: {block}")
+
+        # calculate additional values for each dot location
+        center_x, center_y = 400, 300  # center of the screen in EEGEyeNet's apparatus
+        locations['angle2center'] = np.arctan2(
+            center_y - locations['y'], locations['x'] - center_x
+        ) * 180 / np.pi - 90  # subtract 90 to make N=0, W=90, S=180, E=-90
+        dx, dy = locations['x'].diff(), -1 * locations['y'].diff()  # negative y because y increases downwards
+        locations['pixel_distance'] = np.sqrt(dx ** 2 + dy ** 2)
+        locations['azimuth'] = np.arctan2(dy, dx) * 180 / np.pi - 90  # subtract 90 to make N=0, W=90, S=180, E=-90
+        return locations
+
+    @staticmethod
     def _events_df_to_channel(
             events_df: pd.DataFrame, n_samples: int = None
     ) -> (np.ndarray, np.ndarray, np.ndarray):
