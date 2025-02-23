@@ -207,4 +207,4 @@ class DotsSession(BaseSession):
         return block_type
 
     def __repr__(self):
-        return f"{super().__repr__()}{self.session_num}"
+        return f"{super().__repr__()}_{self.session_num}"
