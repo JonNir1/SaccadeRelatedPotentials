@@ -114,53 +114,31 @@ class BaseSession(ABC):
         return self._data
 
     @final
-    def get_eog_data(self, reog_ref: Optional[str] =None) -> pd.DataFrame:
+    def get_channel(self, channel: Union[str, int]) -> np.ndarray:
         """
-        Calculates EOG data for the left/right vertical and horizontal difference of relevant EEG electrodes from the
-        EGI-128 electrode system, bsed on the settings used by Jia & Tyler, 2019
-        (https://doi.org/10.3758/s13428-019-01280-8).
-        Additionally, if `reog_ref` is not None, calculates the radial EOG by taking the mean of the four EOG channels
-        and subtracting the ref electrode, which should be a central electrode, as was done by
-        Keren, Yuval-Grinberg & Deouell, 2010 (https://doi.org/10.1016/j.neuroimage.2009.10.057).
-
-        EOG electrodes used (from Jia & Tyler, 2019):
-            - left vertical: E5 - E127 (top - bottom)
-            - left horizontal: E32 - E17 (Left - Medial; rightwards)
-            - right vertical: E8 - E126
-            - right horizontal: E1 - E17 (Right - Medial; leftwards)
-        REOG reference electrodes:
-            - Cz: channel `Cz` in the EEGEyeNet recordings using EGI-128 system
-            - Pz: channel `E62` in the EEGEyeNet recordings using EGI-128 system
-            - Oz: channel `E75` in the EEGEyeNet recordings using EGI-128 system
-
-        :param reog_ref: Reference electrode for radial EOG calculation, or None if rEOG should not be calculated.
-
-        :return: a pd.DataFrame of shape 5×N or 6×N:
-            - N is the number of samples (columns)
-            - rows are `t` (timestamps), `lv`, `lh`, `rv`, `rh`, and `reog` (if `reog_ref` is not None)
+        Get the data for a specific channel/electrode in the EGI-128 system. Central channels (Fz, Cz, Pz, Oz) can be
+        specified by their label, while other channels can be specified by their electrode number/name (for example,
+        electrode 62 can be specified as `62`, `E62`, or `Pz`).
+        :param channel: The channel label or electrode number.
+        :return: The data for the specified channel, with shape (N,) where N is the number of samples in the session.
         """
-        data = self.get_data()
-        channel_labels = self.get_channel_labels()
-        ts = pd.Series(self.get_timestamps(), name='t')
-        lv = pd.Series((data[channel_labels == 'E5'] - data[channel_labels == 'E127']).flatten(), name='lv')
-        lh = pd.Series((data[channel_labels == 'E32'] - data[channel_labels == 'E17']).flatten(), name='lh')
-        rv = pd.Series((data[channel_labels == 'E8'] - data[channel_labels == 'E126']).flatten(), name='rv')
-        rh = pd.Series((data[channel_labels == 'E1'] - data[channel_labels == 'E17']).flatten(), name='rh')
-        eog = pd.concat([ts, lv, lh, rv, rh], axis=1).T
-        if reog_ref is None:
-            return eog
-
-        if reog_ref.lower() in {'cz'}:
-            reog_ref = 'Cz'
-        elif reog_ref.lower() in {'pz', 'E62'}:
-            reog_ref = 'E62'
-        elif reog_ref.lower() in {'oz', 'E75'}:
-            reog_ref = 'E75'
+        central_channels = {'Fz': 'E11', 'Cz': 'Cz', 'Pz': 'E62', 'Oz': 'E75'}
+        channel = central_channels.get(channel.capitalize(), channel)
+        if isinstance(channel, int):
+            channel = f"E{channel}"
+        if isinstance(channel, str):
+            channel = channel.upper().strip()
         else:
-            raise ValueError(f"Invalid reog_ref: {reog_ref}")
-        # TODO: verify we don't need to flip the directions of some EOG channels
-        reog = pd.Series(np.mean(eog.iloc[1:4], axis=0) - data[channel_labels == reog_ref].flatten(), name='reog')
-        return pd.concat([eog.T, reog], axis=1).T
+            raise TypeError(f"Invalid channel. Should be a string or integer, not {type(channel)}")
+        return self._data[self.get_channel_locations().labels == channel].flatten()
+
+    @final
+    def get_eog(self) -> np.ndarray:
+        """ Returns channels where the `type` (in the channel locations table) is 'eog'. """
+        data = self.get_data()
+        channel_locations = self.get_channel_locations()
+        eog_data = data[channel_locations['type'] == 'eog']
+        return eog_data
 
     @final
     def get_gaze_data(self) -> pd.DataFrame:
@@ -206,6 +184,27 @@ class BaseSession(ABC):
     def get_channel_labels(self) -> np.ndarray:
         chan_locs = self.get_channel_locations()
         return chan_locs.labels
+
+    @final
+    def calculate_radial_eog(self, ref: Union[str, int]) -> np.ndarray:
+        """
+        Calculates the "radial" EOG signal, using the method introduced by Keren, Yuval-Grinberg & Deouell, 2010 (https://doi.org/10.1016/j.neuroimage.2009.10.057):
+        The rEOG is calculated by taking the mean of all EOG electrodes and subtracting the reference electrode,
+        which should be a central electrode (Cz, Pz, or Oz).
+
+        :return np.ndarray: The radial EOG signal, shape (N,) where N is the number of samples in the session.
+        :raises ValueError: If the reference electrode is not one of 'Cz', 'Pz' (E62), or 'Oz' (E75).
+        """
+        eog_data = self.get_eog()
+        if ref.lower() in {'cz'}:
+            ref_data = self.get_channel('Cz')
+        elif ref.lower() in {'pz', 'e62', 62}:
+            ref_data = self.get_channel('E62')
+        elif ref.lower() in {'oz', 'e75', 75}:
+            ref_data = self.get_channel('E75')
+        else:
+            raise ValueError(f"Invalid rEOG ref: {ref}. Must be a central electrode: 'Cz', 'Pz', or 'Oz'.")
+        return np.mean(eog_data, axis=0) - ref_data
 
     @final
     def _verify_events_input(self, events: pd.DataFrame):

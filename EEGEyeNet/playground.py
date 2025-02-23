@@ -22,10 +22,10 @@ gaze_data = ses.get_gaze_data()
 locs = ses.get_channel_locations()
 labels = ses.get_channel_labels()
 events = ses.get_events()
-eog = ses.get_eog_data()
-eog_reog = ses.get_eog_data(reog_ref='Pz')
+reog = ses.calculate_radial_eog('Pz')
 
-raw, event_dict = ses.to_mne()
+
+raw, event_dict = ses.to_mne('Pz')
 
 mne_events_et = mne.find_events(raw, stim_channel="STI_ET", output='onset', shortest_event=1, consecutive=True)
 mne_events_ses = mne.find_events(raw, stim_channel="STI_SES", output='onset', shortest_event=1, consecutive=True)

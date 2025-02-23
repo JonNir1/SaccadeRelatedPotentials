@@ -1,5 +1,5 @@
 import os
-from typing import Dict
+from typing import Dict, Union
 from enum import IntEnum
 
 import numpy as np
@@ -107,7 +107,7 @@ class DotsSession(BaseSession):
             raise AssertionError(f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
         return DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
 
-    def to_mne(self, verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
+    def to_mne(self, reog_ref: Union[str, int] = 'Pz', verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
         et_triggers, ses_triggers, dot_triggers = DotsSession._events_df_to_channel(self._events, self.num_samples)
 
         # create mapping from event name to event code
@@ -123,14 +123,13 @@ class DotsSession(BaseSession):
 
         # create MNE RawArray object
         chanlocs = self.get_channel_locations()
-        eog_data = self.get_eog_data(reog_ref=None).iloc[1:]     # exclude the TIME channel
         info = mne.create_info(
-            ch_names=chanlocs['labels'].tolist() + [f"{ch.upper()}_EOG" for ch in eog_data.index] + ['STI_ET', 'STI_SES', 'STI_DOT'],
-            ch_types=chanlocs['type'].tolist() + ['eog' for _ in eog_data.index] + ['stim', 'stim', 'stim'],
+            ch_names=chanlocs['labels'].tolist() + ['rEOG'] + ['STI_ET', 'STI_SES', 'STI_DOT'],
+            ch_types=chanlocs['type'].tolist() + ['eog'] + ['stim', 'stim', 'stim'],
             sfreq=self.sampling_rate,
         )
         raw = mne.io.RawArray(
-            np.vstack((self.get_data(), eog_data.values, et_triggers, ses_triggers, dot_triggers)),
+            np.vstack((self.get_data(), self.calculate_radial_eog(reog_ref), et_triggers, ses_triggers, dot_triggers)),
             info,
             verbose=verbose
         )
@@ -185,12 +184,14 @@ class DotsSession(BaseSession):
         channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "ET_TIME" in lbl.upper()), 'type'] = 'eyegaze'
         channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "GAZE" in lbl.upper()), 'type'] = 'eyegaze'
         channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "AREA" in lbl.upper()), 'type'] = 'pupil'
-        is_eog = channel_locs_df['labels'].map(
-            lambda lbl: lbl.upper() in [f"E{i}" for i in range(125, 129)]  # E125-E128 are EOG channels     # TODO: verify this is correct
-        )
-        channel_locs_df.loc[is_eog, 'type'] = 'eog'
+        channel_locs_df.loc[
+            # EOG channels are based on Jia & Tyler, 2019 (https://doi.org/10.3758/s13428-019-01280-8), Methods section "Eye Tracking"
+            channel_locs_df['labels'].map(lambda lbl: lbl.upper() in ['E25', 'E127', 'E8', 'E126', 'E32', 'E1', 'E17']),
+            'type'
+        ] = 'eog'
         channel_locs_df['type'] = channel_locs_df['type'].map(
-            lambda val: str(val).strip().replace('[', '').replace(']', '')
+            # fill cells with no `type` value with the type 'eeg'
+            lambda val: str(val).strip().lower().replace('[', '').replace(']', '')
         ).map(lambda val: val if val else 'eeg')
 
         # replace empty array cells with NaN
