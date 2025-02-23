@@ -60,7 +60,8 @@ class DotsSession(BaseSession):
         # post-process the `events` DataFrame
         events['orig_type'] = events['type']
         events['type'] = DotsSession.__parse_event_types(events['type'])
-        events['block'] = DotsSession.__extract_block_type(events['type'])  # add "block" column: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
+        events['block'] = DotsSession.__extract_block_type_event(
+            events['type'])  # add "block" column: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
 
         # extract metadata from path
         basename = os.path.basename(path)  # example: EP12_DOTS5_EEG.mat
@@ -194,7 +195,7 @@ class DotsSession(BaseSession):
         return event_type
 
     @staticmethod
-    def __extract_block_type(event_type: pd.Series) -> pd.Series:
+    def __extract_block_type_event(event_type: pd.Series) -> pd.Series:
         block_on_idxs = event_type[(event_type == "block_on") | (event_type == 55)].index
         block_off_idxs = event_type[(event_type == "block_off") | (event_type == 56)].index
         if len(block_on_idxs) != len(block_off_idxs):
