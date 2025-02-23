@@ -224,6 +224,39 @@ class BaseSession(ABC):
                 f"Number of channel locations ({channel_locations.shape[0]}) must match number of channels in data ({self.num_channels})"
             )
 
+    @staticmethod
+    @final
+    def _parse_raw_channel_locations(channel_locs: Dict[str, list]) -> pd.DataFrame:
+        """
+        Extracts the `channel_locations` table from the raw `channel_locs` struct in the sEEG mat file, using the info
+        provided in the "data structure" appendix to EEGEyeNet's documentation: https://osf.io/ktv7m/
+        """
+        channel_locs_df = pd.DataFrame(channel_locs)
+        missing_columns = set(BaseSession._CHANNEL_LOCATION_COLUMNS) - set(channel_locs_df.columns)
+        if missing_columns:
+            raise ValueError(f"Missing columns in channel locations DataFrame: {missing_columns}")
+        channel_locs_df['labels'] = channel_locs_df['labels'].map(lambda val: val.strip())
+        channel_locs_df.loc[channel_locs_df['labels'] == 'TIME', 'labels'] = 'ET_TIME'
+
+        # parse channel types to MNE channel types
+        channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "ET_TIME" in lbl.upper()), 'type'] = 'eyegaze'
+        channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "GAZE" in lbl.upper()), 'type'] = 'eyegaze'
+        channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "AREA" in lbl.upper()), 'type'] = 'pupil'
+        channel_locs_df.loc[
+            # EOG channels are based on Jia & Tyler, 2019 (https://doi.org/10.3758/s13428-019-01280-8), Methods section "Eye Tracking"
+            channel_locs_df['labels'].map(lambda lbl: lbl.upper() in ['E25', 'E127', 'E8', 'E126', 'E32', 'E1', 'E17']),
+            'type'] = 'eog'
+        channel_locs_df['type'] = channel_locs_df['type'].map(
+            # fill cells with no `type` value with the type 'eeg'
+            lambda val: str(val).strip().lower().replace('[', '').replace(']', '')
+        ).map(lambda val: val if val else 'eeg')
+
+        # replace empty array cells with NaN
+        channel_locs_df = channel_locs_df.map(
+            lambda val: np.nan if isinstance(val, np.ndarray) and len(val) == 0 else val
+        )
+        return channel_locs_df
+
     def __eq__(self, other):
         if not isinstance(other, BaseSession):
             return False

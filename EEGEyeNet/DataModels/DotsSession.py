@@ -102,7 +102,7 @@ class DotsSession(BaseSession):
             raise AssertionError(f"Grid number in events ({_grid_num}) must match metadata ({session_num})")
 
         # load channel locations into DataFrames
-        channel_locs = DotsSession._channel_locations_from_dict(mat['chanlocs'])
+        channel_locs = DotsSession._parse_raw_channel_locations(mat['chanlocs'])
         if len(channel_locs.index) != num_channels:
             raise AssertionError(f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
         return DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
@@ -170,35 +170,6 @@ class DotsSession(BaseSession):
         # add "block" column: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
         events_df['block'] = DotsSession.__extract_block_type(events_df['type'])
         return events_df
-
-    @staticmethod
-    def _channel_locations_from_dict(channel_locs: Dict[str, list]) -> pd.DataFrame:
-        channel_locs_df = pd.DataFrame(channel_locs)
-        missing_columns = set(DotsSession._CHANNEL_LOCATION_COLUMNS) - set(channel_locs_df.columns)
-        if missing_columns:
-            raise ValueError(f"Missing columns in channel locations DataFrame: {missing_columns}")
-        channel_locs_df['labels'] = channel_locs_df['labels'].map(lambda val: val.strip())
-        channel_locs_df.loc[channel_locs_df['labels'] == 'TIME', 'labels'] = 'ET_TIME'
-
-        # parse channel types to MNE channel types
-        channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "ET_TIME" in lbl.upper()), 'type'] = 'eyegaze'
-        channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "GAZE" in lbl.upper()), 'type'] = 'eyegaze'
-        channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "AREA" in lbl.upper()), 'type'] = 'pupil'
-        channel_locs_df.loc[
-            # EOG channels are based on Jia & Tyler, 2019 (https://doi.org/10.3758/s13428-019-01280-8), Methods section "Eye Tracking"
-            channel_locs_df['labels'].map(lambda lbl: lbl.upper() in ['E25', 'E127', 'E8', 'E126', 'E32', 'E1', 'E17']),
-            'type'
-        ] = 'eog'
-        channel_locs_df['type'] = channel_locs_df['type'].map(
-            # fill cells with no `type` value with the type 'eeg'
-            lambda val: str(val).strip().lower().replace('[', '').replace(']', '')
-        ).map(lambda val: val if val else 'eeg')
-
-        # replace empty array cells with NaN
-        channel_locs_df = channel_locs_df.map(
-            lambda val: np.nan if isinstance(val, np.ndarray) and len(val) == 0 else val
-        )
-        return channel_locs_df
 
     @staticmethod
     def _events_df_to_channel(
