@@ -1,9 +1,10 @@
 from abc import ABC, abstractmethod
-from typing import final, Dict, Union, Optional
+from typing import final, Dict, Union
 from enum import StrEnum, IntEnum
 
 import numpy as np
 import pandas as pd
+from pymatreader import read_mat
 from mne.io import Raw
 
 from utils.array_utils import to_vector
@@ -62,6 +63,7 @@ class BaseSession(ABC):
     @staticmethod
     @abstractmethod
     def from_mat_file(path: str) -> "BaseSession":
+        # TODO: make this a Factory Method once other session classes are implemented
         raise NotImplementedError
 
     @abstractmethod
@@ -225,8 +227,49 @@ class BaseSession(ABC):
             )
 
     @staticmethod
-    @final
-    def _parse_raw_channel_locations(channel_locs: Dict[str, list]) -> pd.DataFrame:
+    def _parse_mat_file(path: str):
+        mat = read_mat(path)['sEEG']
+        # load metadata from mat file
+        num_channels = mat['nbchan']
+        num_samples = mat['pnts']
+        sampling_rate = mat['srate']
+        xmin, xmax = mat['xmin'], mat['xmax']  # not sure what these are for
+        ref = mat['ref'].strip().lower()
+        ref = "average" if ref == "averef" else ref
+
+        # load timestamps and verify inputs
+        timestamps = to_vector(mat['times'])  # timestamps in milliseconds: 1 x num_samples
+        if timestamps.shape[0] != num_samples:
+            raise AssertionError(
+                f"Number of samples in timestamps ({timestamps.shape[0]}) must match metadata ({num_samples})")
+        _sr = calculate_sampling_rate(timestamps, decimals=3)
+        if not np.isclose(_sr, sampling_rate):
+            raise AssertionError(
+                f"Sampling rate calculated from timestamps ({_sr}) must match metadata ({sampling_rate})")
+
+        # load channel data and verify inputs
+        data = mat['data']  # channel data: num_channels x num_samples
+        if data.shape[0] != num_channels:
+            raise AssertionError(f"Number of channels in data ({data.shape[0]}) must match metadata ({num_channels})")
+        if data.shape[1] != num_samples:
+            raise AssertionError(f"Number of samples in data ({data.shape[1]}) must match metadata ({num_samples})")
+
+        # clean gaze data - if X, Y, and Pupil are all 0, replace with NaN
+        is_missing_gaze_data = np.all(data[130:] <= 0, axis=0)
+        data[130:, is_missing_gaze_data] = np.nan
+
+        # load channel locations into DataFrame and verify inputs
+        channel_locs = BaseSession.__parse_raw_channel_locations(mat['chanlocs'])
+        if len(channel_locs.index) != num_channels:
+            raise AssertionError(
+                f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
+        # load events into DataFrame
+        events = BaseSession.__parse_raw_events(mat['event'])
+
+        return data, timestamps, events, channel_locs, ref
+
+    @staticmethod
+    def __parse_raw_channel_locations(channel_locs: Dict[str, list]) -> pd.DataFrame:
         """
         Extracts the `channel_locations` table from the raw `channel_locs` struct in the sEEG mat file, using the info
         provided in the "data structure" appendix to EEGEyeNet's documentation: https://osf.io/ktv7m/
@@ -256,6 +299,33 @@ class BaseSession(ABC):
             lambda val: np.nan if isinstance(val, np.ndarray) and len(val) == 0 else val
         )
         return channel_locs_df
+
+    @staticmethod
+    @final
+    def __parse_raw_events(events: Dict[str, list]) -> pd.DataFrame:
+        events_df = pd.DataFrame(events)
+        missing_columns = set(BaseSession._EVENT_COLUMNS) - set(events_df.columns)
+        if missing_columns:
+            raise ValueError(f"Missing columns in events DataFrame: {missing_columns}")
+
+        # calculate end time for each event (including 0-duration events)
+        new_endtime = events_df['latency'] + events_df['duration']
+        is_zero_dur = events_df['duration'] == 0
+        new_endtime[~is_zero_dur] -= 1  # start count from zero so subtract 1 from end time
+        if not np.all(new_endtime[is_zero_dur] == events_df['latency'][is_zero_dur]):
+            raise ValueError("Error in calculating end time for zero-duration events")
+        orig_endtime = events_df['endtime']
+        if not np.all((orig_endtime[~is_zero_dur] == new_endtime[~is_zero_dur])):
+            raise ValueError("Error in calculating end time for non-zero events")
+        events_df['endtime'] = new_endtime
+
+        # fill missing values with NaN
+        for col in events_df.columns:
+            if col in ['type', 'latency', 'duration', 'endtime']:
+                # don't touch these columns
+                continue
+            events_df.loc[events_df[col] <= 0, col] = np.nan
+        return events_df
 
     def __eq__(self, other):
         if not isinstance(other, BaseSession):

@@ -5,11 +5,8 @@ from enum import IntEnum
 import numpy as np
 import pandas as pd
 import mne
-from pymatreader import read_mat
 
 from EEGEyeNet.DataModels.BaseSession import BaseSession, SessionTaskType
-from utils.array_utils import to_vector
-from utils.calc_utils import calculate_sampling_rate
 
 
 class DotsBlockTaskType(IntEnum):
@@ -59,53 +56,27 @@ class DotsSession(BaseSession):
 
     @staticmethod
     def from_mat_file(path: str) -> "DotsSession":
-        mat = read_mat(path)['sEEG']
+        data, timestamps, events, channel_locs, ref = DotsSession._parse_mat_file(path)
+        # post-process the `events` DataFrame
+        events['orig_type'] = events['type']
+        events['type'] = DotsSession.__parse_event_types(events['type'])
+        events['block'] = DotsSession.__extract_block_type(events['type'])  # add "block" column: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
 
         # extract metadata from path
-        basename = os.path.basename(path)   # example: EP12_DOTS5_EEG.mat
+        basename = os.path.basename(path)  # example: EP12_DOTS5_EEG.mat
         subject_id = basename.split("_")[0].capitalize()
         session_num = int(basename.split("_")[1][-1])
 
-        # load metadata from mat file
-        num_channels = mat['nbchan']
-        num_samples = mat['pnts']
-        sampling_rate = mat['srate']
-        xmin, xmax = mat['xmin'], mat['xmax']   # not sure what these are for
-        ref = mat['ref'].strip().lower()
-        ref = "average" if ref == "averef" else ref
-
-        # load timestamps and verify inputs
-        timestamps = to_vector(mat['times'])    # timestamps in milliseconds: 1 x num_samples
-        if timestamps.shape[0] != num_samples:
-            raise AssertionError(f"Number of samples in timestamps ({timestamps.shape[0]}) must match metadata ({num_samples})")
-        _sr = calculate_sampling_rate(timestamps, decimals=3)
-        if not np.isclose(_sr, sampling_rate):
-            raise AssertionError(f"Sampling rate calculated from timestamps ({_sr}) must match metadata ({sampling_rate})")
-
-        # load channel data and verify inputs
-        data = mat['data']  # channel data: num_channels x num_samples
-        if data.shape[0] != num_channels:
-            raise AssertionError(f"Number of channels in data ({data.shape[0]}) must match metadata ({num_channels})")
-        if data.shape[1] != num_samples:
-            raise AssertionError(f"Number of samples in data ({data.shape[1]}) must match metadata ({num_samples})")
-
-        # clean gaze data - if X, Y, and Pupil are all 0, replace with NaN
-        is_missing_gaze_data = np.all(data[130:] <= 0, axis=0)
-        data[130:, is_missing_gaze_data] = np.nan
-
-        # load events (triggers & ET events) into DataFrames
-        events = DotsSession._events_from_dict(mat['event'])
+        # check if grid number in events matches metadata
         _grid_num = int((events['type'][
             events['type'].map(lambda val: str(val).startswith(DotsSession.__GRID_PREFIX_STR))
         ].iloc[0])[-1])
         if _grid_num != session_num:
             raise AssertionError(f"Grid number in events ({_grid_num}) must match metadata ({session_num})")
 
-        # load channel locations into DataFrames
-        channel_locs = DotsSession._parse_raw_channel_locations(mat['chanlocs'])
-        if len(channel_locs.index) != num_channels:
-            raise AssertionError(f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
-        return DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
+        # return DotsSession object
+        ses = DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
+        return ses
 
     def to_mne(self, reog_ref: Union[str, int] = 'Pz', verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
         et_triggers, ses_triggers, dot_triggers = DotsSession._events_df_to_channel(self._events, self.num_samples)
@@ -138,38 +109,6 @@ class DotsSession(BaseSession):
     @property
     def session_num(self) -> int:
         return self._session_num
-
-    @staticmethod
-    def _events_from_dict(events: Dict[str, list]) -> pd.DataFrame:
-        events_df = pd.DataFrame(events)
-        missing_columns = set(DotsSession._EVENT_COLUMNS) - set(events_df.columns)
-        if missing_columns:
-            raise ValueError(f"Missing columns in events DataFrame: {missing_columns}")
-
-        # calculate end time for each event (including 0-duration events)
-        new_endtime = events_df['latency'] + events_df['duration']
-        is_zero_dur = events_df['duration'] == 0
-        new_endtime[~is_zero_dur] -= 1      # start count from zero so subtract 1 from end time
-        if not np.all(new_endtime[is_zero_dur] == events_df['latency'][is_zero_dur]):
-            raise ValueError("Error in calculating end time for zero-duration events")
-        orig_endtime = events_df['endtime']
-        if not np.all((orig_endtime[~is_zero_dur] == new_endtime[~is_zero_dur])):
-            raise ValueError("Error in calculating end time for non-zero events")
-        events_df['endtime'] = new_endtime
-
-        # fill missing values with NaN
-        for col in events_df.columns:
-            if col in ['type', 'latency', 'duration', 'endtime']:
-                # don't touch these columns
-                continue
-            events_df.loc[events_df[col] <= 0, col] = np.nan
-
-        # parse the "type" column
-        events_df['orig_type'] = events_df['type']
-        events_df['type'] = DotsSession.__parse_event_types(events_df['type'])
-        # add "block" column: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
-        events_df['block'] = DotsSession.__extract_block_type(events_df['type'])
-        return events_df
 
     @staticmethod
     def _events_df_to_channel(
