@@ -99,12 +99,9 @@ class DotsSession(BaseSession):
                 event_dict[f"{k2}/{k1}"] = np.uint8(v)  # key changes from "L_Fixation" to "fixation/l"
             else:
                 event_dict[f"{k1}/{k2}"] = np.uint8(v)  # key changes from "block_on" to "block/on"
-        for dot_val in np.unique(dot_triggers):
-            if dot_val >= 100:
-                dot_val -= 100  # convert 101, 102, 103 to 1, 2, 3
-            if dot_val == 0:
-                continue
-            event_dict[f"stim/{dot_val}"] = np.uint8(dot_val)
+        event_dict.update({
+            f"stim/{val}": val for val in np.unique(dot_triggers) if val not in {0, DotsSession.__EVENTS_DICT['stim_off']}
+        })
         if not all(np.isin(np.unique(et_triggers[et_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in ET triggers")
         if not all(np.isin(np.unique(ses_triggers[ses_triggers != 0]), list(event_dict.values()))):
@@ -162,15 +159,15 @@ class DotsSession(BaseSession):
 
     @staticmethod
     def __parse_event_types(event_type: pd.Series) -> pd.Series:
+        event_type = event_type.map(lambda val: str(val).strip())
+        event_type = event_type.map(lambda val: int(val) if val.isnumeric() else val)
         event_type = event_type.map(
-            lambda val: str(val).strip()
-        ).map(
-            lambda val: int(val) if val.isnumeric() else val
+            lambda val: val-100 if isinstance(val, int) and 100 <= val < 200 else val   # convert 101-127 to 1-27
         )
         event_type = event_type.replace({41: "stim_off", 55: "block_on", 56: "block_off"})
-        block_on_idxs = event_type[event_type == "block_on"].index
 
         # find grid number: the first event labelled 12-17 before the first block_on event
+        block_on_idxs = event_type[event_type == "block_on"].index
         events_preceding_blocks = event_type.iloc[:block_on_idxs.min()]
         is_gridnum_event = np.isin(events_preceding_blocks, np.arange(12, 18))
         if is_gridnum_event.sum() == 0:
@@ -284,7 +281,7 @@ class DotsSession(BaseSession):
         session_evnt_codes = [
             # Session events (block_on, block_off, etc.) are encoded as 55, 56, 201-205
             v for k, v in DotsSession.__EVENTS_DICT.items()
-            if (v not in et_evnt_codes) and (k != "stim_off")   # exclude stim_off (code 41)
+            if (v not in et_evnt_codes) and (k != "stim_off") and (v != 41)   # exclude stim_off (code 41)
         ]
         idxs = np.arange(n_samples)
         for evnt in new_events['type'].unique():
