@@ -86,7 +86,8 @@ class DotsSession(BaseSession):
         return self._session_num
 
     def to_mne(self, reog_ref: Union[str, int] = 'Pz', verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
-        et_triggers, ses_triggers, dot_triggers = DotsSession._events_df_to_channel(self._events, self.num_samples)
+        et_triggers, ses_triggers, dot_triggers = DotsSession.__events_df_to_mne_channels(self._events,
+                                                                                          self.num_samples)
 
         # create mapping from event name to event code
         event_dict = dict()
@@ -146,67 +147,6 @@ class DotsSession(BaseSession):
         if _grid_num != ses_num:
             raise AssertionError(f"Grid number in events ({_grid_num}) must match metadata ({ses_num})")
         return events
-
-    @staticmethod
-    def _events_df_to_channel(
-            events_df: pd.DataFrame, n_samples: int = None
-    ) -> (np.ndarray, np.ndarray, np.ndarray):
-        if n_samples is None:
-            n_samples = int(events_df['endtime'].max())
-        if n_samples <= 0:
-            raise ValueError("n_samples must be a positive integer")
-        is_zero_duration = events_df['duration'] == 0
-        is_string_event_type = events_df['type'].map(lambda x: isinstance(x, str))
-        non_zero_string_events = events_df.loc[~is_zero_duration & is_string_event_type]
-        is_valid = non_zero_string_events['type'].map(
-            lambda typ: "fixation" in typ.lower() or "saccade" in typ.lower() or "blink" in typ.lower()
-        ).all()
-        if not is_valid:
-            raise AssertionError("Unexpected event type in events DataFrame")
-
-        # replace the 'type' column with integer codes
-        new_events = events_df.copy().sort_values('latency')
-        new_events['type'] = new_events['type'].map(
-            lambda typ: typ if type(typ) in [int, float, np.uint] else DotsSession.__EVENTS_DICT.get(typ, np.nan)
-        )
-        is_nan = new_events['type'].isna().any()
-        if is_nan:
-            raise AssertionError("Unexpected event type in events DataFrame")
-        new_events['type'] = new_events['type'].replace(
-            # replace events "19" and "27" with "1"; and "119" and "127" with "101" - all represent the middle dot
-            {1: 1, 19: 1, 27: 1, 101: 101, 119: 101, 127: 101}
-        )
-
-        # populate the trigger channels
-        et_triggers = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
-        ses_triggers = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
-        dot_triggers = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
-        et_evnt_codes = [
-            # ET events are encoded as 211-216
-            v for k, v in DotsSession.__EVENTS_DICT.items()
-            if "fixation" in k.lower() or "saccade" in k.lower() or "blink" in k.lower()
-        ]
-        session_evnt_codes = [
-            # Session events (block_on, block_off, etc.) are encoded as 55, 56, 201-205
-            v for k, v in DotsSession.__EVENTS_DICT.items()
-            if (v not in et_evnt_codes) and (k != "stim_off")   # exclude stim_off (code 41)
-        ]
-        idxs = np.arange(n_samples)
-        for evnt in new_events['type'].unique():
-            is_evnt = new_events['type'] == evnt
-            is_event_idx = np.any(
-                    (idxs >= new_events.loc[is_evnt, 'latency'].to_numpy()[:, None]) &
-                    (idxs <= new_events.loc[is_evnt, 'endtime'].to_numpy()[:, None]),
-                    axis=0
-            )
-            # populate the correct trigger channel
-            if evnt in et_evnt_codes:
-                et_triggers[is_event_idx] = np.uint8(evnt)
-            elif evnt in session_evnt_codes:
-                ses_triggers[is_event_idx] = np.uint8(evnt)
-            else:
-                dot_triggers[is_event_idx] = np.uint8(evnt)
-        return et_triggers, ses_triggers, dot_triggers
 
     @staticmethod
     def __parse_event_types(event_type: pd.Series) -> pd.Series:
@@ -285,6 +225,67 @@ class DotsSession(BaseSession):
             events.loc[is_dot_in_block, 'prev_distance_px'] = np.sqrt(dx ** 2 + dy ** 2)
             events.loc[is_dot_in_block, 'prev_angle_deg'] = np.arctan2(dy, dx) * 180 / np.pi - 90   # subtract 90 to make N=0, W=90, S=180, E=-90
         return events
+
+    @staticmethod
+    def __events_df_to_mne_channels(
+            events_df: pd.DataFrame, n_samples: int = None
+    ) -> (np.ndarray, np.ndarray, np.ndarray):
+        if n_samples is None:
+            n_samples = int(events_df['endtime'].max())
+        if n_samples <= 0:
+            raise ValueError("n_samples must be a positive integer")
+        is_zero_duration = events_df['duration'] == 0
+        is_string_event_type = events_df['type'].map(lambda x: isinstance(x, str))
+        non_zero_string_events = events_df.loc[~is_zero_duration & is_string_event_type]
+        is_valid = non_zero_string_events['type'].map(
+            lambda typ: "fixation" in typ.lower() or "saccade" in typ.lower() or "blink" in typ.lower()
+        ).all()
+        if not is_valid:
+            raise AssertionError("Unexpected event type in events DataFrame")
+
+        # replace the 'type' column with integer codes
+        new_events = events_df.copy().sort_values('latency')
+        new_events['type'] = new_events['type'].map(
+            lambda typ: typ if type(typ) in [int, float, np.uint] else DotsSession.__EVENTS_DICT.get(typ, np.nan)
+        )
+        is_nan = new_events['type'].isna().any()
+        if is_nan:
+            raise AssertionError("Unexpected event type in events DataFrame")
+        new_events['type'] = new_events['type'].replace(
+            # replace events "19" and "27" with "1"; and "119" and "127" with "101" - all represent the middle dot
+            {1: 1, 19: 1, 27: 1, 101: 101, 119: 101, 127: 101}
+        )
+
+        # populate the trigger channels
+        et_triggers = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
+        ses_triggers = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
+        dot_triggers = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
+        et_evnt_codes = [
+            # ET events are encoded as 211-216
+            v for k, v in DotsSession.__EVENTS_DICT.items()
+            if "fixation" in k.lower() or "saccade" in k.lower() or "blink" in k.lower()
+        ]
+        session_evnt_codes = [
+            # Session events (block_on, block_off, etc.) are encoded as 55, 56, 201-205
+            v for k, v in DotsSession.__EVENTS_DICT.items()
+            if (v not in et_evnt_codes) and (k != "stim_off")   # exclude stim_off (code 41)
+        ]
+        idxs = np.arange(n_samples)
+        for evnt in new_events['type'].unique():
+            is_evnt = new_events['type'] == evnt
+            is_event_idx = np.any(
+                    (idxs >= new_events.loc[is_evnt, 'latency'].to_numpy()[:, None]) &
+                    (idxs <= new_events.loc[is_evnt, 'endtime'].to_numpy()[:, None]),
+                    axis=0
+            )
+            # populate the correct trigger channel
+            if evnt in et_evnt_codes:
+                et_triggers[is_event_idx] = np.uint8(evnt)
+            elif evnt in session_evnt_codes:
+                ses_triggers[is_event_idx] = np.uint8(evnt)
+            else:
+                dot_triggers[is_event_idx] = np.uint8(evnt)
+        return et_triggers, ses_triggers, dot_triggers
 
     def __repr__(self):
         return f"{super().__repr__()}_{self.session_num}"
