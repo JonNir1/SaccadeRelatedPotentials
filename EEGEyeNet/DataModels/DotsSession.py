@@ -86,10 +86,12 @@ class DotsSession(BaseSession):
         return self._session_num
 
     def to_mne(self, reog_ref: Union[str, int] = 'Pz', verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
-        et_triggers, ses_triggers, dot_triggers = DotsSession.__events_df_to_mne_channels(self._events,
-                                                                                          self.num_samples)
+        reog = self.calculate_radial_eog(reog_ref)
+        et_triggers, ses_triggers, dot_triggers = DotsSession.__events_df_to_mne_channels(
+            self._events, self.num_samples
+        )
 
-        # create mapping from event name to event code
+        # create mapping from event-name to event-code
         event_dict = dict()
         event_dict.update({k: np.uint(v) for k, v in DotsSession.__EVENTS_DICT.items()})
         event_dict.update({f"stim_{val}": val for val in np.unique(dot_triggers) if val != 0})
@@ -108,7 +110,7 @@ class DotsSession(BaseSession):
             sfreq=self.sampling_rate,
         )
         raw = mne.io.RawArray(
-            np.vstack((self.get_data(), self.calculate_radial_eog(reog_ref), et_triggers, ses_triggers, dot_triggers)),
+            np.vstack((self.get_data(), reog, et_triggers, ses_triggers, dot_triggers)),
             info,
             verbose=verbose
         )
