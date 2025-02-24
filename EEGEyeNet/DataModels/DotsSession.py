@@ -40,7 +40,7 @@ class DotsSession(BaseSession):
         "L_blink": 215,
         "R_blink": 216,
     }
-    __ORIGINAL_TARGET_LOCATIONS: Dict[int, Tuple[int, int]] = {
+    __DOT_LOCATIONS: Dict[int, Tuple[int, int]] = {
         # dot locations specified in EEGEyeNet's OSF appendix on experimental paradigms (https://osf.io/ktv7m/)
         # IMPORTANT NOTE: the (x,y) coordinates follow Matlab convention, so bottom-left is (0,0) and top-right is (800,600)
         1: (400, 300),  # middle
@@ -68,27 +68,35 @@ class DotsSession(BaseSession):
     @staticmethod
     def from_mat_file(path: str) -> "DotsSession":
         data, timestamps, events, channel_locs, ref = DotsSession._parse_mat_file(path)
-        # post-process the `events` DataFrame
-        events['orig_type'] = events['type']
-        events['type'] = DotsSession.__parse_event_types(events['type'])
-        events['block'] = DotsSession.__extract_block_type_event(
-            events['type'])  # add "block" column: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
 
         # extract metadata from path
         basename = os.path.basename(path)  # example: EP12_DOTS5_EEG.mat
         subject_id = basename.split("_")[0].capitalize()
         session_num = int(basename.split("_")[1][-1])
 
-        # check if grid number in events matches metadata
-        _grid_num = int((events['type'][
-            events['type'].map(lambda val: str(val).startswith(DotsSession.__GRID_PREFIX_STR))
-        ].iloc[0])[-1])
-        if _grid_num != session_num:
-            raise AssertionError(f"Grid number in events ({_grid_num}) must match metadata ({session_num})")
+        # post-process the `events` DataFrame
+        events = DotsSession._post_process_events(events, session_num)
 
         # return DotsSession object
         ses = DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
         return ses
+
+    @staticmethod
+    def _post_process_events(events: pd.DataFrame, ses_num: int) -> pd.DataFrame:
+        # parse event types
+        events['orig_type'] = events['type']
+        events['type'] = DotsSession.__parse_event_types(events['type'])
+
+        # extract block type: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
+        events['block'] = DotsSession.__extract_block_type_event(events['type'])
+
+        # assert that grid number in events matches session number from metadata
+        _grid_num = int((events['type'][events['type'].map(
+            lambda val: str(val).startswith(DotsSession.__GRID_PREFIX_STR)
+        )].iloc[0])[-1])
+        if _grid_num != ses_num:
+            raise AssertionError(f"Grid number in events ({_grid_num}) must match metadata ({ses_num})")
+        return events
 
     def to_mne(self, reog_ref: Union[str, int] = 'Pz', verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
         et_triggers, ses_triggers, dot_triggers = DotsSession._events_df_to_channel(self._events, self.num_samples)
@@ -147,7 +155,7 @@ class DotsSession(BaseSession):
             raise ValueError("Cannot get dot locations for OUT_OF_BLOCK block type")
 
         # get dot locations based on the block type
-        base_locations = pd.DataFrame(DotsSession.__ORIGINAL_TARGET_LOCATIONS).T
+        base_locations = pd.DataFrame(DotsSession.__DOT_LOCATIONS).T
         base_locations.columns = ['x', 'y']
         base_locations['y'] = 600 - base_locations['y']  # convert to Python coordinates, origin at top-left
         if block == DotsBlockTaskType.BASIC or block == DotsBlockTaskType.BASIC2:
