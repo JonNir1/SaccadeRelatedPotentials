@@ -99,7 +99,12 @@ class DotsSession(BaseSession):
                 event_dict[f"{k2}/{k1}"] = np.uint8(v)  # key changes from "L_Fixation" to "fixation/l"
             else:
                 event_dict[f"{k1}/{k2}"] = np.uint8(v)  # key changes from "block_on" to "block/on"
-        event_dict.update({f"stim/{val}": val for val in np.unique(dot_triggers) if val != 0})
+        for dot_val in np.unique(dot_triggers):
+            if dot_val >= 100:
+                dot_val -= 100  # convert 101, 102, 103 to 1, 2, 3
+            if dot_val == 0:
+                continue
+            event_dict[f"stim/{dot_val}"] = np.uint8(dot_val)
         if not all(np.isin(np.unique(et_triggers[et_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in ET triggers")
         if not all(np.isin(np.unique(ses_triggers[ses_triggers != 0]), list(event_dict.values()))):
