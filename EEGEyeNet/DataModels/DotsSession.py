@@ -211,10 +211,12 @@ class DotsSession(BaseSession):
         events.loc[is_dot_event, 'center_distance_px'] = np.sqrt(
             (events.loc[is_dot_event, 'stim_x'] - center_x) ** 2 + (events.loc[is_dot_event, 'stim_y'] - center_y) ** 2
         )
-        events.loc[is_dot_event, 'center_angle_deg'] = np.arctan2(
+        center_angle = np.arctan2(
             center_y - events.loc[is_dot_event, 'stim_y'],  # y increases downwards
             events.loc[is_dot_event, 'stim_x'] - center_x
         ) * 180 / np.pi - 90  # subtract 90 to make N=0, W=90, S=180, E=-90
+        center_angle[center_angle <= -180] += 360  # conform to range (-180, 180]
+        events.loc[is_dot_event, 'center_angle_deg'] = center_angle
 
         # relative to previous dot (1st dot in each block should get `NaN`)
         for b in events['block'].unique():
@@ -223,7 +225,9 @@ class DotsSession(BaseSession):
             dx = events.loc[is_dot_in_block, 'stim_x'].diff()
             dy = -1 * events.loc[is_dot_in_block, 'stim_y'].diff()  # y increases downwards
             events.loc[is_dot_in_block, 'prev_distance_px'] = np.sqrt(dx ** 2 + dy ** 2)
-            events.loc[is_dot_in_block, 'prev_angle_deg'] = np.arctan2(dy, dx) * 180 / np.pi - 90   # subtract 90 to make N=0, W=90, S=180, E=-90
+            prev_angle = np.arctan2(dy, dx) * 180 / np.pi - 90  # subtract 90 to make N=0, W=90, S=180, E=-90
+            prev_angle[prev_angle <= -180] += 360  # conform to range (-180, 180]
+            events.loc[is_dot_in_block, 'prev_angle_deg'] = prev_angle
         return events
 
     @staticmethod
