@@ -93,8 +93,13 @@ class DotsSession(BaseSession):
 
         # create mapping from event-name to event-code
         event_dict = dict()
-        event_dict.update({k: np.uint(v) for k, v in DotsSession.__EVENTS_DICT.items()})
-        event_dict.update({f"stim_{val}": val for val in np.unique(dot_triggers) if val != 0})
+        for k, v in DotsSession.__EVENTS_DICT.items():
+            k1, k2 = k.lower().split("_")
+            if k2 in ["fixation", "saccade", "blink"]:
+                event_dict[f"{k2}/{k1}"] = np.uint8(v)  # key changes from "L_Fixation" to "fixation/l"
+            else:
+                event_dict[f"{k1}/{k2}"] = np.uint8(v)  # key changes from "block_on" to "block/on"
+        event_dict.update({f"stim/{val}": val for val in np.unique(dot_triggers) if val != 0})
         if not all(np.isin(np.unique(et_triggers[et_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in ET triggers")
         if not all(np.isin(np.unique(ses_triggers[ses_triggers != 0]), list(event_dict.values()))):
