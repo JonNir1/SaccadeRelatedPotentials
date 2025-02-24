@@ -81,22 +81,9 @@ class DotsSession(BaseSession):
         ses = DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
         return ses
 
-    @staticmethod
-    def _post_process_events(events: pd.DataFrame, ses_num: int) -> pd.DataFrame:
-        # parse event types
-        events['orig_type'] = events['type']
-        events['type'] = DotsSession.__parse_event_types(events['type'])
-
-        # extract block type: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
-        events['block'] = DotsSession.__extract_block_type_event(events['type'])
-
-        # assert that grid number in events matches session number from metadata
-        _grid_num = int((events['type'][events['type'].map(
-            lambda val: str(val).startswith(DotsSession.__GRID_PREFIX_STR)
-        )].iloc[0])[-1])
-        if _grid_num != ses_num:
-            raise AssertionError(f"Grid number in events ({_grid_num}) must match metadata ({ses_num})")
-        return events
+    @property
+    def session_num(self) -> int:
+        return self._session_num
 
     def to_mne(self, reog_ref: Union[str, int] = 'Pz', verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
         et_triggers, ses_triggers, dot_triggers = DotsSession._events_df_to_channel(self._events, self.num_samples)
@@ -126,62 +113,39 @@ class DotsSession(BaseSession):
         )
         return raw, event_dict
 
-    @property
-    def session_num(self) -> int:
-        return self._session_num
+    @staticmethod
+    def get_dot_coordinates(dot_number: int) -> Tuple[int, int]:
+        if 1 <= dot_number <= 27:
+            base_x, base_y = DotsSession.__DOT_LOCATIONS.get(dot_number, (None, None))
+        elif 101 <= dot_number <= 127:
+            # sometimes dots are marked with `101` instead of `1`
+            base_x, base_y = DotsSession.__DOT_LOCATIONS.get(dot_number - 100, (None, None))
+        else:
+            raise KeyError(f"Invalid dot number: {dot_number}")
+        if base_x is None or base_y is None:
+            raise ValueError(f"Unknown coordinates for dot number {dot_number}.")
+        base_y = DotsSession.SCREEN_RESOLUTION[1] - base_y  # convert to Python coordinates, origin at top-left
+        return base_x, base_y
 
     @staticmethod
-    def get_dot_locations(block: Union[DotsBlockTaskType, int, str]) -> pd.DataFrame:
-        """
-        Get the target locations in Python coordinates (origin at top-left) for a given block number.
-        Blocks follow the order: 1=basic -> 2=reversed -> 3=mirrored -> 4=reversed_mirrored -> 5=basic2. Other block
-        types raise a ValueError.
-        TECHNICAL NOTE: EEGEyeNet uses a 800x600 screen resolution
+    def _post_process_events(events: pd.DataFrame, ses_num: int) -> pd.DataFrame:
+        # parse event types
+        events['orig_type'] = events['type']
+        events['type'] = DotsSession.__parse_event_types(events['type'])
 
-        :param block: the block type (DotsBlockTaskType), its code (int), or its name (str)
-        :returns: a DataFrame is indexed by dot appearance and contains the following columns:
-            - 'x' and 'y' representing the horizontal and vertical coordinates (Python standard), respectively.
-            - 'angle2center' representing the angle in degrees from the center of the screen (N=0, W=90, S=180, E=-90).
-            - 'pixel_distance' representing the distance from the previous dot in pixels.
-            - 'azimuth' representing the angle in degrees from the previous dot (N=0, W=90, S=180, E=-90).
-        """
-        if isinstance(block, str):
-            block = DotsBlockTaskType[block.upper().strip()]
-        elif isinstance(block, int):
-            block = DotsBlockTaskType(block)
-        if not isinstance(block, DotsBlockTaskType):
-            raise TypeError("block must be a DotsBlockTaskType, its code (int 1-5), or its name (str)")
-        if block == DotsBlockTaskType.OUT_OF_BLOCK:
-            raise ValueError("Cannot get dot locations for OUT_OF_BLOCK block type")
+        # extract block type: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
+        events['block'] = DotsSession.__extract_block_type_event(events['type'])
 
-        # get dot locations based on the block type
-        base_locations = pd.DataFrame(DotsSession.__DOT_LOCATIONS).T
-        base_locations.columns = ['x', 'y']
-        base_locations['y'] = 600 - base_locations['y']  # convert to Python coordinates, origin at top-left
-        if block == DotsBlockTaskType.BASIC or block == DotsBlockTaskType.BASIC2:
-            locations = base_locations
-        elif block == DotsBlockTaskType.REVERSED:
-            locations = base_locations.iloc[::-1].reset_index(drop=True)
-        elif block == DotsBlockTaskType.MIRRORED:
-            locations = base_locations.copy()
-            locations['x'] = 800 - locations['x']
-            locations['y'] = 600 - locations['y']
-        elif block == DotsBlockTaskType.REVERSED_MIRRORED:
-            locations = base_locations.iloc[::-1].reset_index(drop=True)
-            locations['x'] = 800 - locations['x']
-            locations['y'] = 600 - locations['y']
-        else:
-            raise ValueError(f"Unexpected block type: {block}")
+        # append dots metadata (coordinates, etc.)
+        events = DotsSession.__append_dots_metadata(events)
 
-        # calculate additional values for each dot location
-        center_x, center_y = 400, 300  # center of the screen in EEGEyeNet's apparatus
-        locations['angle2center'] = np.arctan2(
-            center_y - locations['y'], locations['x'] - center_x
-        ) * 180 / np.pi - 90  # subtract 90 to make N=0, W=90, S=180, E=-90
-        dx, dy = locations['x'].diff(), -1 * locations['y'].diff()  # negative y because y increases downwards
-        locations['pixel_distance'] = np.sqrt(dx ** 2 + dy ** 2)
-        locations['azimuth'] = np.arctan2(dy, dx) * 180 / np.pi - 90  # subtract 90 to make N=0, W=90, S=180, E=-90
-        return locations
+        # assert that grid number in events matches session number from metadata
+        _grid_num = int((events['type'][events['type'].map(
+            lambda val: str(val).startswith(DotsSession.__GRID_PREFIX_STR)
+        )].iloc[0])[-1])
+        if _grid_num != ses_num:
+            raise AssertionError(f"Grid number in events ({_grid_num}) must match metadata ({ses_num})")
+        return events
 
     @staticmethod
     def _events_df_to_channel(
@@ -278,6 +242,49 @@ class DotsSession(BaseSession):
         for i, (on, off) in enumerate(zip(block_on_idxs, block_off_idxs)):
             block_type.loc[on:off] = DotsBlockTaskType(i + 1)
         return block_type
+
+    @staticmethod
+    def __append_dots_metadata(events: pd.DataFrame) -> pd.DataFrame:
+        """
+        For each of the displayed stimuli (dots), append the following columns:
+        - 'stim_x' and 'stim_y' representing the horizontal and vertical coordinates (Python standard), respectively.
+        - 'center_distance_px' representing the distance in pixels of the current dot from the center of the screen.
+        - 'center_angle_deg' representing the angle in degrees from the center of the screen (N=0, W=90, S=180, E=-90).
+        - 'prev_distance_px' representing the distance in pixels of the current dot from the previous dot in the block.
+        - 'prev_angle_deg' representing the angle in degrees from the previous dot (N=0, W=90, S=180, E=-90).
+
+        :param events: the DataFrame containing the events data
+        :returns: the DataFrame with the appended columns
+        """
+        is_dot_event = ~np.isin(events['type'], list(DotsSession.__EVENTS_DICT.keys()))
+
+        # dot locations
+        events.loc[is_dot_event, 'stim_x'] = events.loc[is_dot_event, 'type'].map(
+            lambda dot_id: DotsSession.get_dot_coordinates(dot_id)[0]
+        )
+        events.loc[is_dot_event, 'stim_y'] = events.loc[is_dot_event, 'type'].map(
+            lambda dot_id: DotsSession.get_dot_coordinates(dot_id)[1]
+        )
+
+        # relative to screen center
+        center_x, center_y = DotsSession.SCREEN_RESOLUTION[0] / 2, DotsSession.SCREEN_RESOLUTION[1] / 2
+        events.loc[is_dot_event, 'center_distance_px'] = np.sqrt(
+            (events.loc[is_dot_event, 'stim_x'] - center_x) ** 2 + (events.loc[is_dot_event, 'stim_y'] - center_y) ** 2
+        )
+        events.loc[is_dot_event, 'center_angle_deg'] = np.arctan2(
+            center_y - events.loc[is_dot_event, 'stim_y'],  # y increases downwards
+            events.loc[is_dot_event, 'stim_x'] - center_x
+        ) * 180 / np.pi - 90  # subtract 90 to make N=0, W=90, S=180, E=-90
+
+        # relative to previous dot (1st dot in each block should get `NaN`)
+        for b in events['block'].unique():
+            is_block = events['block'] == b
+            is_dot_in_block = is_dot_event & is_block
+            dx = events.loc[is_dot_in_block, 'stim_x'].diff()
+            dy = -1 * events.loc[is_dot_in_block, 'stim_y'].diff()  # y increases downwards
+            events.loc[is_dot_in_block, 'prev_distance_px'] = np.sqrt(dx ** 2 + dy ** 2)
+            events.loc[is_dot_in_block, 'prev_angle_deg'] = np.arctan2(dy, dx) * 180 / np.pi - 90   # subtract 90 to make N=0, W=90, S=180, E=-90
+        return events
 
     def __repr__(self):
         return f"{super().__repr__()}_{self.session_num}"

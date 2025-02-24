@@ -25,6 +25,7 @@ class EyeMovementType(IntEnum):
 
 
 class BaseSession(ABC):
+    SCREEN_RESOLUTION = (800, 600)
     _TASK_TYPE: SessionTaskType
     _EVENT_COLUMNS = [
         'type', 'latency', 'duration', 'endtime',
