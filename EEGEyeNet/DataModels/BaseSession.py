@@ -26,6 +26,7 @@ class EyeMovementType(IntEnum):
 
 class BaseSession(ABC):
     SCREEN_RESOLUTION = (800, 600)
+    _UNITS = dict(eeg='µV', eog='µV', eyegaze='pixels', pupil='AU', time='ms')  # EEGEyeNet measurement units
     _TASK_TYPE: SessionTaskType
     _EVENT_COLUMNS = [
         'type', 'latency', 'duration', 'endtime',
@@ -107,6 +108,11 @@ class BaseSession(ABC):
     @property
     def task_type(self) -> SessionTaskType:
         return self.__class__._TASK_TYPE
+
+    @classmethod
+    @final
+    def units(cls, key: str) -> str:
+        return cls._UNITS.get(key, 'unknown')
 
     @final
     def get_timestamps(self) -> np.ndarray:
