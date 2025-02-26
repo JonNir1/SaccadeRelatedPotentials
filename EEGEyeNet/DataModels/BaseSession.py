@@ -293,9 +293,11 @@ class BaseSession(ABC):
         channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "GAZE" in lbl.upper()), 'type'] = 'eyegaze'
         channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "AREA" in lbl.upper()), 'type'] = 'pupil'
         channel_locs_df.loc[
-            # EOG channels are based on Jia & Tyler, 2019 (https://doi.org/10.3758/s13428-019-01280-8), Methods section "Eye Tracking"
-            channel_locs_df['labels'].map(lambda lbl: lbl.upper() in ['E25', 'E127', 'E8', 'E126', 'E32', 'E1', 'E17']),
-            'type'] = 'eog'
+            # EOG channels are based on Jia & Tyler, 2019 (https://doi.org/10.3758/s13428-019-01280-8),
+            # Methods section "Eye Tracking". We also add channels E125, E128 as they too are EOG channels.
+            channel_locs_df['labels'].map(
+                lambda lbl: lbl.upper() in ['E25', 'E127', 'E8', 'E126', 'E32', 'E1', 'E17', 'E125', 'E128']
+            ), 'type'] = 'eog'
         channel_locs_df['type'] = channel_locs_df['type'].map(
             # fill cells with no `type` value with the type 'eeg'
             lambda val: str(val).strip().lower().replace('[', '').replace(']', '')
