@@ -109,18 +109,27 @@ class DotsSession(BaseSession):
         if not all(np.isin(np.unique(dot_triggers[dot_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in stim triggers")
 
-        # create MNE RawArray object
+        # create MNE Info object
         chanlocs = self.get_channel_locations()
         info = mne.create_info(
             ch_names=chanlocs['labels'].tolist() + ['rEOG'] + ['STI_ET', 'STI_SES', 'STI_DOT'],
             ch_types=chanlocs['type'].tolist() + ['eog'] + ['stim', 'stim', 'stim'],
             sfreq=self.sampling_rate,
         )
-        raw = mne.io.RawArray(
-            np.vstack((self.get_data(), reog, et_triggers, ses_triggers, dot_triggers)),
-            info,
-            verbose=verbose
+        # create MNE RawArray object
+        unit_conversion = pd.Series(info.get_channel_types()).map(
+            dict(
+                eeg=1e-6, eog=1e-6,     # EEGEyeNet records uV but MNE requires eeg/eog channels in V
+                eyegaze=1, pupil=1,     # eye gaze in pixels; pupil in AU
+                misc=1,                 # ET timestamps in ms
+                stim=1,                 # triggers are in raw values
+            )
         )
+        channels = np.multiply(
+            np.vstack((self.get_data(), reog, et_triggers, ses_triggers, dot_triggers)),
+            unit_conversion.values[:, np.newaxis]
+        )
+        raw = mne.io.RawArray(channels, info, verbose=verbose)
         return raw, event_dict
 
     @staticmethod

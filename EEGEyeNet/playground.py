@@ -46,10 +46,10 @@ on_epochs = dot_epochs[
     [key for key in dot_epochs.event_id.keys() if key.startswith('stim') and not key.endswith('off')]
 ]
 
-on_epochs.plot(n_epochs=10, n_channels=5, events=False, block=True)
-
-# TODO: check if there's scaling when generating the `raw` file and if so how to disable it
-raw.plot(events=mne_events_dot, event_id=event_dict, n_channels=5, scalings=dict(eeg=1e1), block=True)
+on_epochs.plot(
+    block=True, n_epochs=10, n_channels=5, events=False,
+    scalings=dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2)
+)
 
 
 #########################################
