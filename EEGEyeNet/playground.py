@@ -5,51 +5,134 @@ import numpy as np
 import pandas as pd
 import pickle as pkl
 import mne
+import matplotlib
 
 from EEGEyeNet.DataModels.DotsSession import DotsSession
 
+# matplotlib.use('TkAgg')
 
 PATH = r'C:\Users\jonathanni\Desktop\EEGEyeNet\dots_data\synchronised_min\EP12\EP12_DOTS3_EEG.mat'    #lab
 # PATH = r'C:\Users\nirjo\Desktop\SRP\data\EEGEyeNet\dots_data\sunchronised_min\EP12\EP12_DOTS1_EEG.mat'  #home
 
-ses = DotsSession.from_mat_file(PATH)
-ts = ses.get_timestamps()
-data = ses.get_data()
-gaze_data = ses.get_gaze_data()
-locs = ses.get_channel_locations()
-labels = ses.get_channel_labels()
-events = ses.get_events()
-reog = ses.calculate_radial_eog('Pz')
+VISUALIZATION_SCALING = dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2)
 
-
-raw, event_dict = ses.to_mne('Pz')
-
-mne_events_et = mne.find_events(raw, stim_channel="STI_ET", output='onset', shortest_event=1, consecutive=True)
-mne_events_ses = mne.find_events(raw, stim_channel="STI_SES", output='onset', shortest_event=1, consecutive=True)
-mne_events_dot = mne.find_events(raw, stim_channel="STI_DOT", output='onset', shortest_event=1, consecutive=True)
-
-# fig = mne.viz.plot_events(
-#     mne_events_dot, sfreq=raw.info['sfreq'], event_id=event_dict, first_samp=raw.first_samp, on_missing='ignore'
-# )
-
+# %%
 ##############################################
-# Epoching the data around stim onsets
+# Loa the data and convert to MNE format
 
-import matplotlib
-matplotlib.use('TkAgg')
+ses = DotsSession.from_mat_file(PATH)
+# ts = ses.get_timestamps()
+# data = ses.get_data()
+# gaze_data = ses.get_gaze_data()
+# locs = ses.get_channel_locations()
+# labels = ses.get_channel_labels()
+# events = ses.get_events()
+# reog = ses.calculate_radial_eog(reog_ref='Pz')
+
+raw, event_dict = ses.to_mne(reog_ref='Pz')
+
+# raw.plot(block=True, scalings=VISUALIZATION_SCALING, n_channels=5)
+
+# %%
+##############################################
+# Filter
+
+NOTCH_FREQ, LOW_FREQ, HIGH_FREQ = 50, 0.1, 100
+
+raw.notch_filter(freqs=NOTCH_FREQ, fir_design='firwin', picks=["eeg", "eog"])               # remove AC line noise
+raw.filter(l_freq=LOW_FREQ, h_freq=HIGH_FREQ, fir_design='firwin', picks=["eeg", "eog"])    # band-pass filter
+
+
+# %%
+##############################################
+# Detect and Annotate Blinks
+
+BEFORE_BLINK, AFTER_BLINK = 0.025, 0.025  # annotate 25ms before after each detected blink
+
+mne_et_events = mne.find_events(raw, stim_channel="STI_ET", output='onset', shortest_event=1, consecutive=True)
+mne_blink_events = mne_et_events[np.isin(mne_et_events[:, 2], [215, 216])]  # DotSession encodes blinks as 215, 216
+mne_eog_events = mne.preprocessing.find_eog_events(raw)
+mne_blink_events = np.sort(np.concatenate([mne_blink_events, mne_eog_events], axis=0))
+
+
+blink_annotations = mne.Annotations(
+    onset=mne_blink_events[:, 0] / raw.info['sfreq'] - BEFORE_BLINK,
+    duration=np.repeat(AFTER_BLINK, len(mne_blink_events)), # TODO: find blink durations from data
+    description='blink',
+)
+raw.set_annotations(blink_annotations)
+
+# raw.plot(block=True, scalings=VISUALIZATION_SCALING, n_channels=5)
+
+# %%
+##############################################
+# Epoch trials based on `stim/{%d}` events
+
+# TODO: ignore epochs with annotated blinks
+
+mne_dot_events = mne.find_events(raw, stim_channel="STI_DOT", output='onset', shortest_event=1, consecutive=True)
 
 dot_epochs = mne.Epochs(
-    raw, mne_events_dot, event_id=event_dict, tmin=-0.4, tmax=1.0, preload=True, on_missing='ignore'
+    raw, mne_dot_events, event_id=event_dict, tmin=-0.4, tmax=1.0, preload=True, on_missing='ignore'
 )
 off_epochs = dot_epochs['stim/off']
 on_epochs = dot_epochs[
     [key for key in dot_epochs.event_id.keys() if key.startswith('stim') and not key.endswith('off')]
 ]
 
-on_epochs.plot(
-    block=True, n_epochs=10, n_channels=5, events=False,
-    scalings=dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2)
+
+# mne.viz.plot_events(
+#     mne_dot_events, sfreq=raw.info['sfreq'], event_id=event_dict, first_samp=raw.first_samp, on_missing='ignore'
+# )
+#
+# on_epochs.plot(block=True, n_epochs=10, n_channels=5, events=False, scalings=VISUALIZATION_SCALING)
+
+# %%
+##############################################
+# TODO: visualize activity in PO7/PO8 for each epoch
+# EGI to 10-20 mapping: https://www.egi.com/images/HydroCelGSN_10-10.pdf
+
+# TODO: calculate difference of PO7-PO8 activity for each epoch
+#  check if N2pc exists and if it precedes the saccade
+#  regress N2pc amplitude/latency with saccade amplitude and latency
+
+
+# %%
+##############################################
+# Calc Evoked Activity in PO7/PO8
+# EGI to 10-20 mapping: https://www.egi.com/images/HydroCelGSN_10-10.pdf
+
+# TODO - actually we don't need this code cell - delete it
+
+
+# REFERENCE = 'average'
+REFERENCE = 'Cz'
+on_epochs.set_eeg_reference(ref_channels=[REFERENCE])
+
+evoked = on_epochs.average(picks=['E65', 'E90', 'rEOG'], by_event_type=False)   # EGI-128 equivalent to PO7/PO8
+evoked.comment = 'Stimulut Onset'
+
+evoked.plot(scalings=VISUALIZATION_SCALING)
+
+evoked_fig = mne.viz.plot_compare_evokeds(
+    evoked, picks='all',
+    title="Evoked Response Comparison",
+    # block=True,
 )
+evoked_fig.show()
+
+# %%
+##############################################
+# Save the MNE-raw struct to file
+
+split_path = PATH.split('\\')
+new_dir, subj_id, basename = split_path[:-2], split_path[-2], split_path[-1].split('.')[0]
+new_dir = os.path.join(*new_dir, 'mne_raw', subj_id)
+os.makedirs(new_dir, exist_ok=True)
+PATH_RAW = os.path.join(new_dir, f'{basename}.fif.gz')
+
+raw.save(PATH_RAW, overwrite=True)
+new_raw = mne.io.read_raw_fif(PATH_RAW, preload=True)
 
 
 #########################################
