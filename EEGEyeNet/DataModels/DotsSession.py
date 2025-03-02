@@ -129,7 +129,7 @@ class DotsSession(BaseSession):
             np.vstack((self.get_data(), reog, et_triggers, ses_triggers, dot_triggers)),
             unit_conversion.values[:, np.newaxis]
         )
-        raw = mne.io.RawArray(channels, info, verbose=verbose)
+        raw = mne.io.RawArray(channels, info, verbose=verbose).set_montage(self._EEG_SYSTEM, on_missing='ignore')
         return raw, event_dict
 
     @staticmethod

@@ -27,6 +27,7 @@ class EyeMovementType(IntEnum):
 class BaseSession(ABC):
     SCREEN_RESOLUTION = (800, 600)
     _UNITS = dict(eeg='µV', eog='µV', eyegaze='pixels', pupil='AU', time='ms')  # EEGEyeNet measurement units
+    _EEG_SYSTEM = "GSN-HydroCel-128"
     _TASK_TYPE: SessionTaskType
     _EVENT_COLUMNS = [
         'type', 'latency', 'duration', 'endtime',
