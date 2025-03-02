@@ -77,6 +77,8 @@ class BaseSession(ABC):
             raw: MNE Raw object
             event_dict: Dictionary mapping event trigger values to event names
         """
+        # TODO: when additional session classes are implemented, this method should contain common logic with an _impl
+        #  method that is overridden by the subclasses
         raise NotImplementedError
 
     @final
