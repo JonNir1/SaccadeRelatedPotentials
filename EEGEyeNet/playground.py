@@ -7,6 +7,7 @@ import pickle as pkl
 import mne
 import matplotlib
 
+from utils import mne_helpers as mnh
 from EEGEyeNet.DataModels.DotsSession import DotsSession
 
 # matplotlib.use('TkAgg')
@@ -47,28 +48,17 @@ raw.filter(l_freq=LOW_FREQ, h_freq=HIGH_FREQ, fir_design='firwin', picks=["eeg",
 ##############################################
 # Detect and Annotate Blinks
 
-BEFORE_BLINK, AFTER_BLINK = 0.025, 0.025  # annotate 25ms before after each detected blink
+BEFORE_BLINK, AFTER_BLINK = 25, 25  # annotate 25ms before & after each detected blink
 
-mne_et_events = mne.find_events(raw, stim_channel="STI_ET", output='onset', shortest_event=1, consecutive=True)
-mne_blink_events = mne_et_events[np.isin(mne_et_events[:, 2], [215, 216])]  # DotSession encodes blinks as 215, 216
-mne_eog_events = mne.preprocessing.find_eog_events(raw)
-mne_blink_events = np.sort(np.concatenate([mne_blink_events, mne_eog_events], axis=0))
-
-
-blink_annotations = mne.Annotations(
-    onset=mne_blink_events[:, 0] / raw.info['sfreq'] - BEFORE_BLINK,
-    duration=np.repeat(AFTER_BLINK, len(mne_blink_events)), # TODO: find blink durations from data
-    description='blink',
-)
-raw.set_annotations(blink_annotations)
+blink_annots_et = mnh.create_blink_annotations(raw, 'STI_ET', {215, 216}, BEFORE_BLINK, AFTER_BLINK)
+blink_annots_eog = mnh.eog_blink_annotations(raw, BEFORE_BLINK, AFTER_BLINK)
+raw.set_annotations(blink_annots_et + blink_annots_eog)
 
 # raw.plot(block=True, scalings=VISUALIZATION_SCALING, n_channels=5)
 
 # %%
 ##############################################
 # Epoch trials based on `stim/{%d}` events
-
-# TODO: ignore epochs with annotated blinks
 
 mne_dot_events = mne.find_events(raw, stim_channel="STI_DOT", output='onset', shortest_event=1, consecutive=True)
 
