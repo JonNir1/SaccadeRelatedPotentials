@@ -50,7 +50,7 @@ raw.filter(l_freq=LOW_FREQ, h_freq=HIGH_FREQ, fir_design='firwin', picks=["eeg",
 
 BEFORE_BLINK, AFTER_BLINK = 25, 25  # annotate 25ms before & after each detected blink
 
-blink_annots_et = mnh.create_blink_annotations(raw, 'STI_ET', {215, 216}, BEFORE_BLINK, AFTER_BLINK)
+blink_annots_et = mnh.eyetracking_blink_annotations(raw, 'STI_ET', {215, 216}, BEFORE_BLINK, AFTER_BLINK)
 blink_annots_eog = mnh.eog_blink_annotations(raw, BEFORE_BLINK, AFTER_BLINK)
 raw.set_annotations(blink_annots_et + blink_annots_eog)
 
@@ -60,21 +60,24 @@ raw.set_annotations(blink_annots_et + blink_annots_eog)
 ##############################################
 # Epoch trials based on `stim/{%d}` events
 
-mne_dot_events = mne.find_events(raw, stim_channel="STI_DOT", output='onset', shortest_event=1, consecutive=True)
+BEFORE_EPOCH_SEC, AFTER_EPOCH_SEC = 0.5, 1.5
 
+mne_dot_events = mne.find_events(raw, stim_channel="STI_DOT", output='onset', shortest_event=1, consecutive=True)
 dot_epochs = mne.Epochs(
-    raw, mne_dot_events, event_id=event_dict, tmin=-0.4, tmax=1.0, preload=True, on_missing='ignore'
+    raw, mne_dot_events, event_id=event_dict,
+    tmin=-1 * BEFORE_EPOCH_SEC, tmax= AFTER_EPOCH_SEC,
+    reject_by_annotation=True, preload=True, on_missing='ignore'
 )
 off_epochs = dot_epochs['stim/off']
 on_epochs = dot_epochs[
     [key for key in dot_epochs.event_id.keys() if key.startswith('stim') and not key.endswith('off')]
 ]
 
-
 # mne.viz.plot_events(
-#     mne_dot_events, sfreq=raw.info['sfreq'], event_id=event_dict, first_samp=raw.first_samp, on_missing='ignore'
+#     mne_dot_events, sfreq=raw.info['sfreq'], event_id=event_dict,
+#     first_samp=raw.first_samp, on_missing='ignore',
 # )
-#
+
 # on_epochs.plot(block=True, n_epochs=10, n_channels=5, events=False, scalings=VISUALIZATION_SCALING)
 
 # %%

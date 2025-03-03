@@ -5,20 +5,6 @@ import pandas as pd
 import mne
 
 
-def create_blink_annotations(
-        raw_data: mne.io.Raw,
-        et_channel: Optional[str] = None,
-        blink_codes: Optional[Union[int, Set[int]]] = None,
-        ms_before: int = 25,
-        ms_after: int = 25,
-) -> mne.Annotations:
-    assert ms_before >= 0, "ms_before must be a non-negative integer"
-    assert ms_after >= 0, "ms_after must be a non-negative integer"
-    samples_before = int(ms_before * raw_data.info['sfreq'] / 1000)
-    samples_after = int(ms_after * raw_data.info['sfreq'] / 1000)
-    return None
-
-
 def eog_blink_annotations(
         raw_data: mne.io.Raw,
         ms_before: int = 25,
