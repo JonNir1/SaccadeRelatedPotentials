@@ -145,6 +145,14 @@ class BaseSession(ABC):
         return self._data[self.get_channel_locations().labels == channel].flatten()
 
     @final
+    def get_eeg(self):
+        """ Returns channels where the `type` (in the channel locations table) is 'eeg'. """
+        data = self.get_data()
+        channel_locations = self.get_channel_locations()
+        eeg_data = data[channel_locations['type'] == 'eeg']
+        return eeg_data
+
+    @final
     def get_eog(self) -> np.ndarray:
         """ Returns channels where the `type` (in the channel locations table) is 'eog'. """
         data = self.get_data()
