@@ -19,7 +19,7 @@ VISUALIZATION_SCALING = dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2)
 
 # %%
 ##############################################
-# Loa the data and convert to MNE format
+# Load the data and convert to MNE format
 
 ses = DotsSession.from_mat_file(PATH)
 # ts = ses.get_timestamps()
