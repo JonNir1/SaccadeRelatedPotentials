@@ -5,7 +5,8 @@ import numpy as np
 import pandas as pd
 import pickle as pkl
 import mne
-import matplotlib
+import matplotlib.pyplot as plt
+import plotly.express as px
 
 from utils import mne_helpers as mnh
 from EEGEyeNet.DataModels.DotsSession import DotsSession
@@ -24,24 +25,39 @@ VISUALIZATION_SCALING = dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2)
 ses = DotsSession.from_mat_file(PATH)
 # ts = ses.get_timestamps()
 # data = ses.get_data()
-# gaze_data = ses.get_gaze_data()
+# gaze_data = ses.get_gaze()
 # locs = ses.get_channel_locations()
 # labels = ses.get_channel_labels()
 # events = ses.get_events()
-# reog = ses.calculate_radial_eog(reog_ref='Pz')
+# reog = ses.calculate_radial_eog(ref='Pz')
 
 raw, event_dict = ses.to_mne(reog_ref='Pz')
 
-# raw.plot(block=True, scalings=VISUALIZATION_SCALING, n_channels=5)
+# raw.plot(
+#     block=True, scalings=VISUALIZATION_SCALING, n_channels=20,
+#     # events=mne.find_events(raw, stim_channel='STI_ET', output='onset', shortest_event=1, consecutive=True)
+# )
 
 # %%
 ##############################################
 # Filter
 
-NOTCH_FREQ, LOW_FREQ, HIGH_FREQ = 50, 0.1, 100
+NOTCH_FREQ = 50
+LOW_FREQ, HIGH_FREQ = 0.1, 100
 
-raw.notch_filter(freqs=NOTCH_FREQ, fir_design='firwin', picks=["eeg", "eog"])               # remove AC line noise
-raw.filter(l_freq=LOW_FREQ, h_freq=HIGH_FREQ, fir_design='firwin', picks=["eeg", "eog"])    # band-pass filter
+# TODO: check if we need to specify `fir_design` and `picks`
+
+raw_unfiltered = raw.copy()     # keep a copy of the unfiltered data
+raw.filter(         # band-pass filter
+    l_freq=LOW_FREQ, h_freq=HIGH_FREQ,
+    fir_design='firwin',
+    picks=["eeg", "eog"]
+)
+raw.notch_filter(   # remove AC line noise
+    freqs=np.arange(NOTCH_FREQ, 1 + 5 * NOTCH_FREQ, NOTCH_FREQ),
+    fir_design='firwin',
+    picks=["eeg", "eog"]
+)
 
 
 # %%
@@ -54,7 +70,18 @@ blink_annots_et = mnh.eyetracking_blink_annotations(raw, 'STI_ET', {215, 216}, B
 blink_annots_eog = mnh.eog_blink_annotations(raw, BEFORE_BLINK, AFTER_BLINK)
 raw.set_annotations(blink_annots_et + blink_annots_eog)
 
-# raw.plot(block=True, scalings=VISUALIZATION_SCALING, n_channels=5)
+# %%
+##############################################
+# Visualize Raw data with Events and Annotations
+
+stim_channel_names = pd.Series(raw.info['ch_names']).loc[pd.Series(raw.get_channel_types()) == 'stim'].tolist()
+mne_events = mne.find_events(raw, stim_channel=stim_channel_names, output='onset', shortest_event=1, consecutive=True)
+
+raw.plot(
+    events=mne_events,
+    scalings=VISUALIZATION_SCALING, n_channels=10,
+    block=True,
+)
 
 # %%
 ##############################################
@@ -62,28 +89,33 @@ raw.set_annotations(blink_annots_et + blink_annots_eog)
 
 BEFORE_EPOCH_SEC, AFTER_EPOCH_SEC = 0.5, 1.5
 
-mne_dot_events = mne.find_events(raw, stim_channel="STI_DOT", output='onset', shortest_event=1, consecutive=True)
-dot_epochs = mne.Epochs(
-    raw, mne_dot_events, event_id=event_dict,
-    tmin=-1 * BEFORE_EPOCH_SEC, tmax= AFTER_EPOCH_SEC,
-    reject_by_annotation=True, preload=True, on_missing='ignore'
-)
-off_epochs = dot_epochs['stim/off']
-on_epochs = dot_epochs[
-    [key for key in dot_epochs.event_id.keys() if key.startswith('stim') and not key.endswith('off')]
-]
-
 # mne.viz.plot_events(
-#     mne_dot_events, sfreq=raw.info['sfreq'], event_id=event_dict,
+#     mne_events, sfreq=raw.info['sfreq'], event_id=event_dict,
 #     first_samp=raw.first_samp, on_missing='ignore',
 # )
 
-# on_epochs.plot(block=True, n_epochs=10, n_channels=5, events=False, scalings=VISUALIZATION_SCALING)
+epochs = mne.Epochs(
+    raw, mne_events, event_id=event_dict,
+    tmin=-1 * BEFORE_EPOCH_SEC, tmax=AFTER_EPOCH_SEC,
+    reject_by_annotation=True, preload=True, on_missing='ignore'
+)
+
+stim_onset_epochs = epochs[[
+    key for key in epochs.event_id.keys() if key.startswith('stim') and not key.endswith('off')
+]]
 
 # %%
 ##############################################
-# TODO: visualize activity in PO7/PO8 for each epoch
+# TODO: visualize activity in PO7 (E65) and PO8 (E90) for each epoch
 # EGI to 10-20 mapping: https://www.egi.com/images/HydroCelGSN_10-10.pdf
+
+eog_channel_names = pd.Series(raw.info['ch_names']).loc[pd.Series(raw.get_channel_types()) == 'eog'].tolist()
+gaze_channel_names = pd.Series(raw.info['ch_names']).loc[pd.Series(raw.get_channel_types()) == 'eyegaze'].tolist()
+stim_onset_epochs_fig = stim_onset_epochs.plot(
+    n_epochs=5, n_channels=20, events=True, scalings=VISUALIZATION_SCALING,
+    picks=['E65', 'E90'] + eog_channel_names + gaze_channel_names,
+    block=True,
+)
 
 # TODO: calculate difference of PO7-PO8 activity for each epoch
 #  check if N2pc exists and if it precedes the saccade
