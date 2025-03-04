@@ -122,8 +122,17 @@ class BaseSession(ABC):
         return self._timestamps
 
     @final
-    def get_data(self) -> np.ndarray:
-        return self._data
+    def get_channel_locations(self) -> pd.DataFrame:
+        return self._channel_locations
+
+    @final
+    def get_channel_labels(self) -> np.ndarray:
+        chan_locs = self.get_channel_locations()
+        return chan_locs.labels
+
+    @final
+    def get_events(self) -> pd.DataFrame:
+        return self._events
 
     @final
     def get_channel(self, channel: Union[str, int]) -> np.ndarray:
@@ -145,39 +154,62 @@ class BaseSession(ABC):
         return self._data[self.get_channel_locations().labels == channel].flatten()
 
     @final
-    def get_eeg(self):
+    def get_data(self, as_frame: bool = True) -> Union[np.ndarray, pd.DataFrame]:
+        data = self._data
+        if not as_frame:
+            return data
+        data = pd.DataFrame(data, index=self.get_channel_labels())
+        data.index.name = "channel"
+        data.columns.name = "sample"
+        return data
+
+    @final
+    def get_eeg(self, as_frame: bool = True) -> Union[np.ndarray, pd.DataFrame]:
         """ Returns channels where the `type` (in the channel locations table) is 'eeg'. """
-        data = self.get_data()
+        data = self.get_data(as_frame=False)
         channel_locations = self.get_channel_locations()
         eeg_data = data[channel_locations['type'] == 'eeg']
+        if not as_frame:
+            return eeg_data
+        eeg_data = pd.DataFrame(eeg_data, index=channel_locations["labels"])
+        eeg_data.index.name = "channel"
+        eeg_data.columns.name = "sample"
         return eeg_data
 
     @final
-    def get_eog(self) -> np.ndarray:
+    def get_eog(self, as_frame: bool = True) -> Union[np.ndarray, pd.DataFrame]:
         """ Returns channels where the `type` (in the channel locations table) is 'eog'. """
-        data = self.get_data()
+        data = self.get_data(as_frame=False)
         channel_locations = self.get_channel_locations()
         eog_data = data[channel_locations['type'] == 'eog']
+        if not as_frame:
+            return eog_data
+        eog_data = pd.DataFrame(eog_data, index=channel_locations["labels"])
+        eog_data.index.name = "channel"
+        eog_data.columns.name = "sample"
         return eog_data
 
     @final
-    def get_gaze_data(self) -> pd.DataFrame:
+    def get_gaze(self, as_frame: bool = True) -> Union[np.ndarray, pd.DataFrame]:
         """
-        Extracts the gaze data from relevant channels (X: 130, Y: 131, Pupil: 132), along with the EEG timestamps
-        (discarding the ET timestamps). Also computes the sample-by-sample label based on the ET events.
-
-        :return: a pd.DataFrame of shape 5×N, where N is the number of samples in the session, and rows are `t`, `x`,
-            `y`, `pupil`, and `label`.
+        Returns channels where the `type` (in the channel locations table) is 'eyegaze' or 'pupil'.
+        If `as_frame` is True, appends the timestamps and sample labels to the gaze data, and returns a DataFrame.
         """
-        # extract gaze data
-        ts = self.get_timestamps()
-        gaze = self._data[130:]
-        gaze = pd.DataFrame(
-            np.vstack((ts, gaze)).T, columns=['t', 'x', 'y', 'pupil']
-        ).sort_values('t').reset_index(drop=True)
+        data = self.get_data(as_frame=False)
+        channel_locations = self.get_channel_locations()
+        is_et = np.isin(channel_locations['type'], ['eyegaze', 'pupil'])
+        gaze_data = data[is_et]
+        if not as_frame:
+            return gaze_data
+        gaze_data = pd.DataFrame(gaze_data, index=channel_locations.loc[is_et, "labels"]).rename(index={
+            'L-GAZE-X': 'x', 'L-GAZE-Y': 'y', 'L-AREA': 'pupil',
+            'R-GAZE-X': 'x', 'R-GAZE-Y': 'y', 'R-AREA': 'pupil'
+        }).T
+        gaze_data.columns.name, gaze_data.index.name = "channel", "sample"
+        gaze_data['t'] = self.get_timestamps()
 
         # add label column for eye movement type
-        gaze['label'] = EyeMovementType.UNDEFINED
+        gaze_data['label'] = EyeMovementType.UNDEFINED
         events = self.get_events()
         is_str_event = events['type'].map(lambda x: isinstance(x, str))
         for em in EyeMovementType:
@@ -185,25 +217,12 @@ class BaseSession(ABC):
                 continue
             is_em = events.loc[is_str_event, 'type'].map(lambda evnt: em.name.lower() in evnt.lower())
             is_em_idx = np.any(
-                (gaze.index.to_numpy() >= events.loc[is_em.index[is_em], 'latency'].to_numpy()[:, None]) &
-                (gaze.index.to_numpy() <= events.loc[is_em.index[is_em], 'endtime'].to_numpy()[:, None]),
+                (gaze_data.index.to_numpy() >= events.loc[is_em.index[is_em], 'latency'].to_numpy()[:, None]) &
+                (gaze_data.index.to_numpy() <= events.loc[is_em.index[is_em], 'endtime'].to_numpy()[:, None]),
                 axis=0
             )
-            gaze.loc[is_em_idx, 'label'] = em
-        return gaze.T
-
-    @final
-    def get_events(self) -> pd.DataFrame:
-        return self._events
-
-    @final
-    def get_channel_locations(self) -> pd.DataFrame:
-        return self._channel_locations
-
-    @final
-    def get_channel_labels(self) -> np.ndarray:
-        chan_locs = self.get_channel_locations()
-        return chan_locs.labels
+            gaze_data.loc[is_em_idx, 'label'] = em
+        return gaze_data.T
 
     @final
     def calculate_radial_eog(self, ref: Union[str, int]) -> np.ndarray:
@@ -215,7 +234,7 @@ class BaseSession(ABC):
         :return np.ndarray: The radial EOG signal, shape (N,) where N is the number of samples in the session.
         :raises ValueError: If the reference electrode is not one of 'Cz', 'Pz' (E62), or 'Oz' (E75).
         """
-        eog_data = self.get_eog()
+        eog_data = self.get_eog(as_frame=False)
         if ref.lower() in {'cz'}:
             ref_data = self.get_channel('Cz')
         elif ref.lower() in {'pz', 'e62', 62}:
@@ -356,7 +375,7 @@ class BaseSession(ABC):
             return False
         if self.reference != other.reference:
             return False
-        if not np.equal(self.get_data(), other.get_data()).all():
+        if not np.equal(self.get_data(as_frame=False), other.get_data(as_frame=False)).all():
             return False
         if not np.equal(self.get_timestamps(), other.get_timestamps()).all():
             return False

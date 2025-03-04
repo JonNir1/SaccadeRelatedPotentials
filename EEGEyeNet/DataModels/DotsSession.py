@@ -1,4 +1,5 @@
 import os
+import warnings
 from typing import Dict, Tuple, Union
 from enum import IntEnum
 
@@ -126,14 +127,21 @@ class DotsSession(BaseSession):
             )
         )
         channels = np.multiply(
-            np.vstack((self.get_data(), reog, et_triggers, ses_triggers, dot_triggers)),
+            np.vstack((self.get_data(as_frame=False), reog, et_triggers, ses_triggers, dot_triggers)),
             unit_conversion.values[:, np.newaxis]
         )
-        raw = mne.io.RawArray(channels, info, verbose=verbose).set_montage(self._EEG_SYSTEM, on_missing='ignore')
+        raw = mne.io.RawArray(channels, info, verbose=verbose)
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", category=RuntimeWarning)
+            raw.set_montage(self._EEG_SYSTEM, on_missing='ignore', verbose=verbose)
         return raw, event_dict
 
     @staticmethod
     def get_dot_coordinates(dot_number: int) -> Tuple[int, int]:
+        """
+        Get the (x, y) coordinates of the specified dot number.
+        NOTE: the origin in the bottom-left corner of the screen.
+        """
         if 1 <= dot_number <= 27:
             base_x, base_y = DotsSession.__DOT_LOCATIONS.get(dot_number, (None, None))
         elif 101 <= dot_number <= 127:
@@ -143,7 +151,6 @@ class DotsSession(BaseSession):
             raise KeyError(f"Invalid dot number: {dot_number}")
         if base_x is None or base_y is None:
             raise ValueError(f"Unknown coordinates for dot number {dot_number}.")
-        base_y = DotsSession.SCREEN_RESOLUTION[1] - base_y  # convert to Python coordinates, origin at top-left
         return base_x, base_y
 
     @staticmethod
@@ -205,11 +212,13 @@ class DotsSession(BaseSession):
     def __append_dots_metadata(events: pd.DataFrame) -> pd.DataFrame:
         """
         For each of the displayed stimuli (dots), append the following columns:
-        - 'stim_x' and 'stim_y' representing the horizontal and vertical coordinates (Python standard), respectively.
+        - 'stim_x' and 'stim_y' representing the horizontal and vertical coordinates, respectively (left-bottom origin).
         - 'center_distance_px' representing the distance in pixels of the current dot from the center of the screen.
         - 'center_angle_deg' representing the angle in degrees from the center of the screen (N=0, W=90, S=180, E=-90).
         - 'prev_distance_px' representing the distance in pixels of the current dot from the previous dot in the block.
         - 'prev_angle_deg' representing the angle in degrees from the previous dot (N=0, W=90, S=180, E=-90).
+
+        NOTE: EEGEyeNet follows the Matlab convention for screen coordinates, where bottom-left is (0,0).
 
         :param events: the DataFrame containing the events data
         :returns: the DataFrame with the appended columns
@@ -230,22 +239,28 @@ class DotsSession(BaseSession):
             (events.loc[is_dot_event, 'stim_x'] - center_x) ** 2 + (events.loc[is_dot_event, 'stim_y'] - center_y) ** 2
         )
         center_angle = np.arctan2(
-            center_y - events.loc[is_dot_event, 'stim_y'],  # y increases downwards
+            events.loc[is_dot_event, 'stim_y'] - center_y,
             events.loc[is_dot_event, 'stim_x'] - center_x
         ) * 180 / np.pi - 90  # subtract 90 to make N=0, W=90, S=180, E=-90
-        center_angle[center_angle <= -180] += 360  # conform to range (-180, 180]
+        # conform angles to range (-180, 180] where North is 0 degrees
+        center_angle[center_angle <= -180] += 360
+        center_angle[center_angle > 180] -= 360
         events.loc[is_dot_event, 'center_angle_deg'] = center_angle
+        events.loc[events['center_distance_px'] == 0, 'center_angle_deg'] = 0   # correct angle for zero distance
 
         # relative to previous dot (1st dot in each block should get `NaN`)
         for b in events['block'].unique():
             is_block = events['block'] == b
             is_dot_in_block = is_dot_event & is_block
             dx = events.loc[is_dot_in_block, 'stim_x'].diff()
-            dy = -1 * events.loc[is_dot_in_block, 'stim_y'].diff()  # y increases downwards
+            dy = events.loc[is_dot_in_block, 'stim_y'].diff()
             events.loc[is_dot_in_block, 'prev_distance_px'] = np.sqrt(dx ** 2 + dy ** 2)
             prev_angle = np.arctan2(dy, dx) * 180 / np.pi - 90  # subtract 90 to make N=0, W=90, S=180, E=-90
-            prev_angle[prev_angle <= -180] += 360  # conform to range (-180, 180]
+            # conform angles to range (-180, 180] where North is 0 degrees
+            prev_angle[prev_angle <= -180] += 360
+            prev_angle[prev_angle > 180] -= 360
             events.loc[is_dot_in_block, 'prev_angle_deg'] = prev_angle
+            events.loc[events['prev_distance_px'] == 0, 'center_angle_deg'] = 0  # correct angle for zero distance
         return events
 
     @staticmethod
