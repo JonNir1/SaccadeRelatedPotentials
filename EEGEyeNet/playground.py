@@ -6,7 +6,10 @@ import pickle as pkl
 import matplotlib.pyplot as plt
 import mne
 
-from utils import mne_helpers as mnh
+import matplotlib
+matplotlib.use('Qt5Agg')
+
+from utils import mne_utils as mnu
 from EEGEyeNet.DataModels.DotsSession import DotsSession
 
 _BASE_PATH = r'C:\Users\jonathanni\Desktop\EEGEyeNet\dots_data\synchronised_min'  # lab
@@ -34,11 +37,11 @@ mne_events = mne.find_events(
     verbose=False
 )
 
-# raw_unreferenced.plot(
-#     block=True,
-#     scalings=VISUALIZATION_SCALING, n_channels=20,
-#     # events=mne_events
-# )
+raw_unreferenced.plot(
+    # block=True,
+    scalings=VISUALIZATION_SCALING, n_channels=20,
+    # events=mne_events
+)
 
 # %%
 ##############################################
@@ -84,8 +87,8 @@ raw.notch_filter(   # remove AC line noise
 
 BEFORE_BLINK, AFTER_BLINK = 25, 25  # annotate 25ms before & after each detected blink
 
-blink_annots_et = mnh.eyetracking_blink_annotations(raw, 'STI_ET', {215, 216}, BEFORE_BLINK, AFTER_BLINK)
-blink_annots_eog = mnh.eog_blink_annotations(raw, BEFORE_BLINK, AFTER_BLINK)
+blink_annots_et = mnu.eyetracking_blink_annotations(raw, 'STI_ET', {215, 216}, BEFORE_BLINK, AFTER_BLINK)
+blink_annots_eog = mnu.eog_blink_annotations(raw, BEFORE_BLINK, AFTER_BLINK)
 raw.set_annotations(blink_annots_et + blink_annots_eog)
 
 # raw.plot(
