@@ -86,13 +86,11 @@ class DotsSession(BaseSession):
     def session_num(self) -> int:
         return self._session_num
 
-    def to_mne(self, reog_ref: Union[str, int] = 'Pz', verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
-        reog = self.calculate_radial_eog(reog_ref)
+    def to_mne(self, verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
+        # create mapping from event-name to event-code
         et_triggers, ses_triggers, dot_triggers = DotsSession.__events_df_to_mne_channels(
             self._events, self.num_samples
         )
-
-        # create mapping from event-name to event-code
         event_dict = dict()
         for k, v in DotsSession.__EVENTS_DICT.items():
             k1, k2 = k.lower().split("_")
@@ -113,8 +111,8 @@ class DotsSession(BaseSession):
         # create MNE Info object
         chanlocs = self.get_channel_locations()
         info = mne.create_info(
-            ch_names=chanlocs['labels'].tolist() + ['rEOG'] + ['STI_ET', 'STI_SES', 'STI_DOT'],
-            ch_types=chanlocs['type'].tolist() + ['eog'] + ['stim', 'stim', 'stim'],
+            ch_names=chanlocs['labels'].tolist() + ['STI_ET', 'STI_SES', 'STI_DOT'],
+            ch_types=chanlocs['type'].tolist() + ['stim', 'stim', 'stim'],
             sfreq=self.sampling_rate,
         )
         # create MNE RawArray object
@@ -127,7 +125,7 @@ class DotsSession(BaseSession):
             )
         )
         channels = np.multiply(
-            np.vstack((self.get_data(as_frame=False), reog, et_triggers, ses_triggers, dot_triggers)),
+            np.vstack((self.get_data(as_frame=False), et_triggers, ses_triggers, dot_triggers)),
             unit_conversion.values[:, np.newaxis]
         )
         raw = mne.io.RawArray(channels, info, verbose=verbose)
@@ -234,7 +232,7 @@ class DotsSession(BaseSession):
         )
 
         # relative to screen center
-        center_x, center_y = DotsSession.SCREEN_RESOLUTION[0] / 2, DotsSession.SCREEN_RESOLUTION[1] / 2
+        center_x, center_y = DotsSession._SCREEN_RESOLUTION[0] / 2, DotsSession._SCREEN_RESOLUTION[1] / 2
         events.loc[is_dot_event, 'center_distance_px'] = np.sqrt(
             (events.loc[is_dot_event, 'stim_x'] - center_x) ** 2 + (events.loc[is_dot_event, 'stim_y'] - center_y) ** 2
         )

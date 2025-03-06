@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import final, Dict, Union
+from typing import final, Optional, Dict, Union
 from enum import StrEnum, IntEnum
 
 import numpy as np
@@ -25,10 +25,11 @@ class EyeMovementType(IntEnum):
 
 
 class BaseSession(ABC):
-    SCREEN_RESOLUTION = (800, 600)
-    _UNITS = dict(eeg='µV', eog='µV', eyegaze='pixels', pupil='AU', time='ms')  # EEGEyeNet measurement units
+    _SCREEN_RESOLUTION = (800, 600)
     _EEG_SYSTEM = "GSN-HydroCel-128"
-    _TASK_TYPE: SessionTaskType
+    _PARA_OCULAR_ELECTRODES = ['E25', 'E127', 'E8', 'E126', 'E32', 'E1', 'E17', 'E125', 'E128']
+    _UNITS = dict(eeg='µV', eog='µV', eyegaze='pixels', pupil='AU', time='ms')  # EEGEyeNet measurement units
+
     _EVENT_COLUMNS = [
         'type', 'latency', 'duration', 'endtime',
         'sac_amplitude', 'sac_endpos_x', 'sac_endpos_y',
@@ -40,6 +41,8 @@ class BaseSession(ABC):
         'sph_theta', 'sph_phi', 'sph_radius', 'theta', 'radius',
     ]
 
+    _TASK_TYPE: SessionTaskType
+
     def __init__(
             self,
             subject: str,
@@ -47,12 +50,12 @@ class BaseSession(ABC):
             timestamps: np.ndarray,
             events: pd.DataFrame,
             channel_locations: pd.DataFrame,
-            reference: str = "average"
+            reference: Optional[str] = None
     ):
         self._subject = subject.strip().upper()
         self._data = data
         self._timestamps = timestamps
-        self._reference = reference.strip().lower()
+        self._reference = None if reference is None else reference.strip().lower()
         self._sr = calculate_sampling_rate(timestamps)
 
         # Events/Triggers
@@ -104,7 +107,7 @@ class BaseSession(ABC):
 
     @final
     @property
-    def reference(self) -> str:
+    def reference(self) -> Optional[str]:
         return self._reference
 
     @final
@@ -227,14 +230,18 @@ class BaseSession(ABC):
     @final
     def calculate_radial_eog(self, ref: Union[str, int]) -> np.ndarray:
         """
-        Calculates the "radial" EOG signal, using the method introduced by Keren, Yuval-Grinberg & Deouell, 2010 (https://doi.org/10.1016/j.neuroimage.2009.10.057):
-        The rEOG is calculated by taking the mean of all EOG electrodes and subtracting the reference electrode,
-        which should be a central electrode (Cz, Pz, or Oz).
+        Calculates the "radial" EOG signal, using the method introduced by Keren, Yuval-Grinberg & Deouell, 2010
+        (https://doi.org/10.1016/j.neuroimage.2009.10.057). The radial EOG signal is calculated by taking the mean of
+        electrodes around the eyes (para-ocular electrodes) and subtracting the reference electrode, which should be a
+        central electrode (Cz, Pz, or Oz).
+        NOTE: Jia & Tyler, 2019 (https://doi.org/10.3758/s13428-019-01280-8) extract EOG data using channels E25, E127,
+        E8, E126, E32, E1, and E17 (EGI-128 system). We add channels E125 and E128 to this list.
 
         :return np.ndarray: The radial EOG signal, shape (N,) where N is the number of samples in the session.
         :raises ValueError: If the reference electrode is not one of 'Cz', 'Pz' (E62), or 'Oz' (E75).
         """
-        eog_data = self.get_eog(as_frame=False)
+        para_ocular_data = np.vstack([self.get_channel(e) for e in self._PARA_OCULAR_ELECTRODES])
+        para_ocular_mean = np.mean(para_ocular_data, axis=0)
         if ref.lower() in {'cz'}:
             ref_data = self.get_channel('Cz')
         elif ref.lower() in {'pz', 'e62', 62}:
@@ -243,7 +250,7 @@ class BaseSession(ABC):
             ref_data = self.get_channel('E75')
         else:
             raise ValueError(f"Invalid rEOG ref: {ref}. Must be a central electrode: 'Cz', 'Pz', or 'Oz'.")
-        return np.mean(eog_data, axis=0) - ref_data
+        return np.mean(para_ocular_mean, axis=0) - ref_data
 
     @final
     def _verify_events_input(self, events: pd.DataFrame):
@@ -272,7 +279,7 @@ class BaseSession(ABC):
         sampling_rate = mat['srate']
         xmin, xmax = mat['xmin'], mat['xmax']  # not sure what these are for
         ref = mat['ref'].strip().lower()
-        ref = "average" if ref == "averef" else ref
+        ref = None if ref == "averef" else ref
 
         # load timestamps and verify inputs
         timestamps = to_vector(mat['times'])  # timestamps in milliseconds: 1 x num_samples
@@ -326,12 +333,6 @@ class BaseSession(ABC):
         channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "ET_TIME" in lbl.upper()), 'type'] = 'misc'
         channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "GAZE" in lbl.upper()), 'type'] = 'eyegaze'
         channel_locs_df.loc[channel_locs_df['labels'].map(lambda lbl: "AREA" in lbl.upper()), 'type'] = 'pupil'
-        channel_locs_df.loc[
-            # EOG channels are based on Jia & Tyler, 2019 (https://doi.org/10.3758/s13428-019-01280-8),
-            # Methods section "Eye Tracking". We also add channels E125, E128 as they too are EOG channels.
-            channel_locs_df['labels'].map(
-                lambda lbl: lbl.upper() in ['E25', 'E127', 'E8', 'E126', 'E32', 'E1', 'E17', 'E125', 'E128']
-            ), 'type'] = 'eog'
         channel_locs_df['type'] = channel_locs_df['type'].map(
             # fill cells with no `type` value with the type 'eeg'
             lambda val: str(val).strip().lower().replace('[', '').replace(']', '')
