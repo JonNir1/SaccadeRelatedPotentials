@@ -1,46 +1,64 @@
 import os
-from typing import Dict, Tuple, Union
 
 import numpy as np
 import pandas as pd
 import pickle as pkl
-import mne
 import matplotlib.pyplot as plt
-import plotly.express as px
+import mne
 
 from utils import mne_helpers as mnh
 from EEGEyeNet.DataModels.DotsSession import DotsSession
 
-# matplotlib.use('TkAgg')
+_BASE_PATH = r'C:\Users\jonathanni\Desktop\EEGEyeNet\dots_data\synchronised_min'  # lab
+# _BASE_PATH = r'C:\Users\nirjo\Desktop\SRP\data\EEGEyeNet\dots_data\sunchronised_min'  # home
+_FILE_PATH = r'EP12\EP12_DOTS3_EEG.mat'
+FULL_PATH = os.path.join(_BASE_PATH, _FILE_PATH)
 
-PATH = r'C:\Users\jonathanni\Desktop\EEGEyeNet\dots_data\synchronised_min\EP12\EP12_DOTS3_EEG.mat'    #lab
-# PATH = r'C:\Users\nirjo\Desktop\SRP\data\EEGEyeNet\dots_data\sunchronised_min\EP12\EP12_DOTS1_EEG.mat'  #home
-
+EEG_REF = 'Cz'
 VISUALIZATION_SCALING = dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2)
 
 # %%
 ##############################################
 # Load the data and convert to MNE format
 
-ses = DotsSession.from_mat_file(PATH)
-# ts = ses.get_timestamps()
-# data = ses.get_data()
-# gaze_data = ses.get_gaze()
-# locs = ses.get_channel_locations()
-# labels = ses.get_channel_labels()
-# events = ses.get_events()
-# reog = ses.calculate_radial_eog(ref='Pz')
+ses = DotsSession.from_mat_file(FULL_PATH)
+raw_unreferenced, event_dict = ses.to_mne()
 
-raw, event_dict = ses.to_mne(reog_ref='Pz')
+stim_channel_names = pd.Series(raw_unreferenced.info['ch_names']).loc[pd.Series(raw_unreferenced.get_channel_types()) == 'stim'].tolist()
+mne_events = mne.find_events(
+    raw_unreferenced,
+    stim_channel=stim_channel_names,
+    output='onset',
+    shortest_event=1,
+    consecutive=True,
+    verbose=False
+)
 
-# raw.plot(
-#     block=True, scalings=VISUALIZATION_SCALING, n_channels=20,
-#     # events=mne.find_events(raw, stim_channel='STI_ET', output='onset', shortest_event=1, consecutive=True)
+# raw_unreferenced.plot(
+#     block=True,
+#     scalings=VISUALIZATION_SCALING, n_channels=20,
+#     # events=mne_events
 # )
 
 # %%
 ##############################################
-# Filter
+# Re-Reference to Cz and Mark EOG channels
+
+raw = raw_unreferenced.copy().set_eeg_reference(ref_channels=[EEG_REF], verbose=False)
+raw.set_channel_types({
+    # set electrodes around the eyes as EOG (see Jia & Tyler (2019): https://doi.org/10.3758/s13428-019-01280-8)
+    ch: 'eog' for ch in ses._PARA_OCULAR_ELECTRODES
+})
+
+# raw.plot(
+#     block=True,
+#     scalings=VISUALIZATION_SCALING, n_channels=20,
+#     # events=mne_events
+# )
+
+# %%
+##############################################
+# Re-Reference and Filter
 
 NOTCH_FREQ = 50
 LOW_FREQ, HIGH_FREQ = 0.1, 100
@@ -70,18 +88,11 @@ blink_annots_et = mnh.eyetracking_blink_annotations(raw, 'STI_ET', {215, 216}, B
 blink_annots_eog = mnh.eog_blink_annotations(raw, BEFORE_BLINK, AFTER_BLINK)
 raw.set_annotations(blink_annots_et + blink_annots_eog)
 
-# %%
-##############################################
-# Visualize Raw data with Events and Annotations
-
-stim_channel_names = pd.Series(raw.info['ch_names']).loc[pd.Series(raw.get_channel_types()) == 'stim'].tolist()
-mne_events = mne.find_events(raw, stim_channel=stim_channel_names, output='onset', shortest_event=1, consecutive=True)
-
-raw.plot(
-    events=mne_events,
-    scalings=VISUALIZATION_SCALING, n_channels=10,
-    block=True,
-)
+# raw.plot(
+#     events=mne_events,
+#     scalings=VISUALIZATION_SCALING, n_channels=10,
+#     block=True,
+# )
 
 # %%
 ##############################################
@@ -120,31 +131,6 @@ stim_onset_epochs_fig = stim_onset_epochs.plot(
 # TODO: calculate difference of PO7-PO8 activity for each epoch
 #  check if N2pc exists and if it precedes the saccade
 #  regress N2pc amplitude/latency with saccade amplitude and latency
-
-
-# %%
-##############################################
-# Calc Evoked Activity in PO7/PO8
-# EGI to 10-20 mapping: https://www.egi.com/images/HydroCelGSN_10-10.pdf
-
-# TODO - actually we don't need this code cell - delete it
-
-
-# REFERENCE = 'average'
-REFERENCE = 'Cz'
-on_epochs.set_eeg_reference(ref_channels=[REFERENCE])
-
-evoked = on_epochs.average(picks=['E65', 'E90', 'rEOG'], by_event_type=False)   # EGI-128 equivalent to PO7/PO8
-evoked.comment = 'Stimulut Onset'
-
-evoked.plot(scalings=VISUALIZATION_SCALING)
-
-evoked_fig = mne.viz.plot_compare_evokeds(
-    evoked, picks='all',
-    title="Evoked Response Comparison",
-    # block=True,
-)
-evoked_fig.show()
 
 # %%
 ##############################################
