@@ -291,17 +291,21 @@ class BaseSession(ABC):
         if data.shape[1] != num_samples:
             raise AssertionError(f"Number of samples in data ({data.shape[1]}) must match metadata ({num_samples})")
 
-        # clean gaze data - if X, Y, and Pupil are all 0, replace with NaN
-        is_missing_gaze_data = np.all(data[130:] <= 0, axis=0)
-        data[130:, is_missing_gaze_data] = np.nan
-
         # load channel locations into DataFrame and verify inputs
         channel_locs = BaseSession.__parse_raw_channel_locations(mat['chanlocs'])
         if len(channel_locs.index) != num_channels:
             raise AssertionError(
                 f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
+
         # load events into DataFrame
         events = BaseSession.__parse_raw_events(mat['event'])
+
+        # clean gaze data - if X, Y, and Pupil are all 0, replace with NaN
+        is_gaze_channel = np.isin(channel_locs['labels'], ['L-GAZE-X', 'L-GAZE-Y', 'R-GAZE-X', 'R-GAZE-Y'])
+        is_missing_gaze = np.all(data[is_gaze_channel, :] <= 0, axis=0)
+        is_pupil_channel = np.isin(channel_locs['labels'], ['L-AREA', 'R-AREA'])
+        is_missing_pupil = (data[is_pupil_channel] <= 0).flatten()
+        data[is_gaze_channel | is_pupil_channel][:, is_missing_gaze | is_missing_pupil] = np.nan
 
         return data, timestamps, events, channel_locs, ref
 
