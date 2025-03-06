@@ -37,11 +37,11 @@ mne_events = mne.find_events(
     verbose=False
 )
 
-raw_unreferenced.plot(
-    # block=True,
-    scalings=VISUALIZATION_SCALING, n_channels=20,
-    # events=mne_events
-)
+# raw_unreferenced.plot(
+#     # block=True,
+#     scalings=VISUALIZATION_SCALING, n_channels=20,
+#     # events=mne_events
+# )
 
 # %%
 ##############################################
@@ -54,7 +54,7 @@ raw.set_channel_types({
 })
 
 # raw.plot(
-#     block=True,
+#     # block=True,
 #     scalings=VISUALIZATION_SCALING, n_channels=20,
 #     # events=mne_events
 # )
