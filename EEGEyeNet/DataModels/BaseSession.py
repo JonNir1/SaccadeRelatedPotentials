@@ -151,7 +151,11 @@ class BaseSession(ABC):
         if isinstance(channel, int):
             channel = f"E{channel}"
         if isinstance(channel, str):
-            channel = channel.upper().strip()
+            channel = channel.strip().capitalize()
+            if channel in central_channels.keys():
+                channel = central_channels[channel]
+            else:
+                channel = channel.upper()
         else:
             raise TypeError(f"Invalid channel. Should be a string or integer, not {type(channel)}")
         return self._data[self.get_channel_locations().labels == channel].flatten()
