@@ -2,13 +2,11 @@ from abc import ABC, abstractmethod
 from typing import final, Optional, Dict, Union
 from enum import StrEnum, IntEnum
 
-import numpy as np
 import pandas as pd
 from pymatreader import read_mat
 from mne.io import Raw
 
-from utils.array_utils import to_vector
-from utils.calc_utils import calculate_sampling_rate
+from mne_helpers.utils import *
 
 
 class SessionTaskType(StrEnum):

@@ -2,18 +2,15 @@ import os
 
 import numpy as np
 import pandas as pd
-import pickle as pkl
-import matplotlib.pyplot as plt
 import mne
 
 import matplotlib
 matplotlib.use('Qt5Agg')
 
-from utils import mne_utils as mnu
 from EEGEyeNet.DataModels.DotsSession import DotsSession
 
-_BASE_PATH = r'C:\Users\jonathanni\Desktop\EEGEyeNet\dots_data\synchronised_min'  # lab
-# _BASE_PATH = r'C:\Users\nirjo\Desktop\SRP\data\EEGEyeNet\dots_data\sunchronised_min'  # home
+# _BASE_PATH = r'C:\Users\jonathanni\Desktop\EEGEyeNet\dots_data\synchronised_min'  # lab
+_BASE_PATH = r'C:\Users\nirjo\Desktop\SRP\data\EEGEyeNet\dots_data\sunchronised_min'  # home
 _FILE_PATH = r'EP12\EP12_DOTS3_EEG.mat'
 FULL_PATH = os.path.join(_BASE_PATH, _FILE_PATH)
 
@@ -50,7 +47,7 @@ mne_events = mne.find_events(
 raw = raw_unreferenced.copy().set_eeg_reference(ref_channels=[EEG_REF], verbose=False)
 raw.set_channel_types({
     # set electrodes around the eyes as EOG (see Jia & Tyler (2019): https://doi.org/10.3758/s13428-019-01280-8)
-    ch: 'eog' for ch in ses._PARA_OCULAR_ELECTRODES
+    ch: 'eog' for ch in ses.para_ocular_electrodes()
 })
 
 # raw.plot(
@@ -87,8 +84,10 @@ raw.notch_filter(   # remove AC line noise
 
 BEFORE_BLINK, AFTER_BLINK = 25, 25  # annotate 25ms before & after each detected blink
 
-blink_annots_et = mnu.eyetracking_blink_annotations(raw, 'STI_ET', {215, 216}, BEFORE_BLINK, AFTER_BLINK)
-blink_annots_eog = mnu.eog_blink_annotations(raw, BEFORE_BLINK, AFTER_BLINK)
+import mne_helpers.ica as mne_ica
+
+blink_annots_et = mne_ica._eyetracking_blink_annotation(raw, 'STI_ET', {215, 216}, BEFORE_BLINK, AFTER_BLINK)
+blink_annots_eog = mne_ica._eog_blink_annotation(raw, BEFORE_BLINK, AFTER_BLINK)
 raw.set_annotations(blink_annots_et + blink_annots_eog)
 
 # raw.plot(
