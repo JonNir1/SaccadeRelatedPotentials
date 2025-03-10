@@ -111,6 +111,14 @@ class BaseSession(ABC):
         return self._reference
 
     @final
+    @reference.setter
+    def reference(self, ref: Optional[str]):
+        if self.reference == ref:
+            return
+        # TODO
+        raise NotImplementedError("Re-setting the reference electrode is not supported yet")
+
+    @final
     @property
     def task_type(self) -> SessionTaskType:
         return self.__class__._TASK_TYPE
