@@ -131,7 +131,7 @@ class DotsSession(BaseSession):
         raw = mne.io.RawArray(channels, info, verbose=verbose)
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
-            raw.set_montage(self._EEG_SYSTEM, on_missing='ignore', verbose=verbose)
+            raw.set_montage("GSN-HydroCel-128", on_missing='ignore', verbose=verbose)
         return raw, event_dict
 
     @staticmethod
@@ -232,7 +232,8 @@ class DotsSession(BaseSession):
         )
 
         # relative to screen center
-        center_x, center_y = DotsSession._SCREEN_RESOLUTION[0] / 2, DotsSession._SCREEN_RESOLUTION[1] / 2
+        screen_resolution = (800, 600)  # EEGEyeNet uses 800x600 screen resolution
+        center_x, center_y = screen_resolution[0] / 2, screen_resolution[1] / 2
         events.loc[is_dot_event, 'center_distance_px'] = np.sqrt(
             (events.loc[is_dot_event, 'stim_x'] - center_x) ** 2 + (events.loc[is_dot_event, 'stim_y'] - center_y) ** 2
         )

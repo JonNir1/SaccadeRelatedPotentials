@@ -25,11 +25,6 @@ class EyeMovementType(IntEnum):
 
 
 class BaseSession(ABC):
-    _SCREEN_RESOLUTION = (800, 600)
-    _EEG_SYSTEM = "GSN-HydroCel-128"
-    _PARA_OCULAR_ELECTRODES = ['E25', 'E127', 'E8', 'E126', 'E32', 'E1', 'E17', 'E125', 'E128']
-    _UNITS = dict(eeg='µV', eog='µV', eyegaze='pixels', pupil='AU', time='ms')  # EEGEyeNet measurement units
-
     _EVENT_COLUMNS = [
         'type', 'latency', 'duration', 'endtime',
         'sac_amplitude', 'sac_endpos_x', 'sac_endpos_y',
@@ -126,12 +121,22 @@ class BaseSession(ABC):
     @classmethod
     @final
     def units(cls, key: str) -> str:
-        return cls._UNITS.get(key, 'unknown')
+        """
+        Returns the measurement units for the specified key (e.g., 'eeg', 'eog', 'eyegaze', 'pupil', 'time'), based on
+        the units used in the EEGEyeNet dataset. If the key is not recognized, returns 'unknown'.
+        """
+        eegeyenet_units = dict(eeg='µV', eog='µV', eyegaze='pixels', pupil='AU', time='ms')
+        return eegeyenet_units.get(key, 'unknown')
 
     @classmethod
     @final
     def para_ocular_electrodes(cls) -> list[str]:
-        return cls._PARA_OCULAR_ELECTRODES
+        """
+        Returns a list of electrode names for the para-ocular electrodes used in the EGI-128 system.
+        We follow the convention used by Jia & Tyler, 2019 (https://doi.org/10.3758/s13428-019-01280-8), who extracted
+        EOG data using channels E25, E127, E8, E126, E32, E1, and E17. We add channels E125 and E128 as well.
+        """
+        return ['E25', 'E127', 'E8', 'E126', 'E32', 'E1', 'E17', 'E125', 'E128']
 
     @final
     def get_timestamps(self) -> np.ndarray:
@@ -257,7 +262,8 @@ class BaseSession(ABC):
         :return np.ndarray: The radial EOG signal, shape (N,) where N is the number of samples in the session.
         :raises ValueError: If the reference electrode is not one of 'Cz', 'Pz' (E62), or 'Oz' (E75).
         """
-        para_ocular_data = np.vstack([self.get_channel(e) for e in self.para_ocular_electrodes()])
+        para_ocular_electrodes = self.para_ocular_electrodes()
+        para_ocular_data = np.vstack([self.get_channel(e) for e in para_ocular_electrodes])
         para_ocular_mean = np.mean(para_ocular_data, axis=0)
         if ref.lower() in {'cz'}:
             ref_data = self.get_channel('Cz')
