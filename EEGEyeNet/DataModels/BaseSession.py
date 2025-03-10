@@ -120,6 +120,11 @@ class BaseSession(ABC):
     def units(cls, key: str) -> str:
         return cls._UNITS.get(key, 'unknown')
 
+    @classmethod
+    @final
+    def para_ocular_electrodes(cls) -> list[str]:
+        return cls._PARA_OCULAR_ELECTRODES
+
     @final
     def get_timestamps(self) -> np.ndarray:
         return self._timestamps
@@ -244,7 +249,7 @@ class BaseSession(ABC):
         :return np.ndarray: The radial EOG signal, shape (N,) where N is the number of samples in the session.
         :raises ValueError: If the reference electrode is not one of 'Cz', 'Pz' (E62), or 'Oz' (E75).
         """
-        para_ocular_data = np.vstack([self.get_channel(e) for e in self._PARA_OCULAR_ELECTRODES])
+        para_ocular_data = np.vstack([self.get_channel(e) for e in self.para_ocular_electrodes()])
         para_ocular_mean = np.mean(para_ocular_data, axis=0)
         if ref.lower() in {'cz'}:
             ref_data = self.get_channel('Cz')
