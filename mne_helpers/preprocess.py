@@ -67,7 +67,7 @@ def preprocess(raw: mne.io.Raw, **kwargs) -> mne.io.Raw:
     # step 5: detect noisy voltage jumps
     jump_annotations = _annotate_voltage_jumps(
         new_raw, channel_type='eeg',
-        jump_threshold_volts=kwargs.get("jump_threshold_volts", 2e-4),  # default to 200 uV
+        jump_threshold_volts=kwargs.get("jump_threshold_volts", 2e-4),  # default to 200 μV
         jump_window_ms=kwargs.get("jump_window_ms", 100),               # default to 100 ms
         min_channel_ratio=kwargs.get("min_channel_ratio", 0.5),         # default to 50%
         pre_annotation_ms=kwargs.get("pre_annotation_ms", 250),         # default to 250 ms
