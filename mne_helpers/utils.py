@@ -1,9 +1,11 @@
+import warnings
 from typing import Sequence, Union, List
 
 import numpy as np
 import mne
 
 MILLISECONDS_IN_SECOND = 1000
+_MIN_FREQ_WARN_THRESHOLD, _MAX_FREQ_WARN_THRESHOLD_WITH_EOG, _MAX_FREQ_WARN_THRESHOLD_NO_EOG = 0.5, 100, 30
 
 
 def milliseconds_to_samples(ms: float, sfreq: float) -> int:
@@ -50,6 +52,71 @@ def calculate_sampling_rate(milliseconds: np.ndarray, decimals: int = None) -> f
     return round(sr, decimals)
 
 
+def apply_notch_filter(
+        raw: mne.io.Raw,
+        freq: float,
+        multiplications: int = 5,
+        include_eog: bool = True,
+        inplace: bool = False,
+) -> mne.io.Raw:
+    """ Applies a notch filter to the given raw data. """
+    assert multiplications > 0, "multiplications must be positive"
+    new_raw = raw if inplace else raw.copy()
+    channel_types = ["eeg", "eog"] if include_eog else ["eeg"]
+    freqs = np.arange(freq, 1 + freq * multiplications, freq).tolist()
+    new_raw.notch_filter(freqs=freqs, picks=channel_types)
+    return new_raw
+
+
+def apply_highpass_filter(
+        raw: mne.io.Raw,
+        min_freq: float,
+        include_eog: bool = True,
+        inplace: bool = False,
+        suppress_warnings: bool = False,
+) -> mne.io.Raw:
+    assert min_freq > 0, "min_freq must be positive"
+    if not suppress_warnings and min_freq > _MIN_FREQ_WARN_THRESHOLD:
+        warnings.warn(
+            f"High-pass filter of {min_freq}Hz is unusually high. " +
+            "Consider setting the cutoff below {_MIN_FREQ_WARN_THRESHOLD}Hz.",
+            UserWarning
+        )
+    new_raw = raw if inplace else raw.copy()
+    channel_types = ["eeg", "eog"] if include_eog else ["eeg"]
+    new_raw.filter(l_freq=min_freq, h_freq=None, picks=channel_types)
+    return new_raw
+
+
+def apply_lowpass_filter(
+        raw: mne.io.Raw,
+        max_freq: float,
+        include_eog: bool = True,
+        inplace: bool = False,
+        suppress_warnings: bool = False,
+) -> mne.io.Raw:
+    assert max_freq > 0, "max_freq must be positive"
+    if not suppress_warnings:
+        if include_eog and max_freq < _MAX_FREQ_WARN_THRESHOLD_WITH_EOG:
+            warnings.warn(
+                f"Low-pass filter of {max_freq}Hz is unusually low for EOG data. " +
+                f"Consider setting the cutoff above {_MAX_FREQ_WARN_THRESHOLD_WITH_EOG}Hz.",
+                UserWarning
+            )
+        elif not include_eog and max_freq < _MAX_FREQ_WARN_THRESHOLD_NO_EOG:
+            warnings.warn(
+                f"Low-pass filter of {max_freq}Hz is unusually low. " +
+                f"Consider setting the cutoff above {_MAX_FREQ_WARN_THRESHOLD_NO_EOG}Hz.",
+                UserWarning
+            )
+        else:
+            pass
+    new_raw = raw if inplace else raw.copy()
+    channel_types = ["eeg", "eog"] if include_eog else ["eeg"]
+    new_raw.filter(l_freq=None, h_freq=max_freq, picks=channel_types)
+    return new_raw
+
+
 def extract_events(
         raw: mne.io.Raw, channel: Union[str, List[str]], output: str = "onset", shortest_event: int = 1
 ) -> np.ndarray:
@@ -70,8 +137,8 @@ def extract_events(
     is_stim_channel = np.array(raw.get_channel_types()) == "stim"
     stim_channel_names = (all_channel_names[is_stim_channel]).tolist()
     if isinstance(channel, str):
-        channel = channel.lower().strip()
-        if channel == "all":
+        channel = channel.strip()
+        if channel.lower() == "all":
             return mne.find_events(
                 raw,
                 stim_channel=stim_channel_names,
@@ -123,7 +190,10 @@ def merge_annotations(annotations: mne.Annotations, merge_within_ms: float = 0.0
             else:
                 merged_anns.append((prev_start, prev_end - prev_start, desc))
                 prev_start, prev_end = curr_start, curr_end
-        merged_anns.append((prev_start, prev_end - prev_start, desc))   # add the last annotation
+
+        # add the last annotation
+        merged_anns.append((prev_start, prev_end - prev_start, desc))
+
     new_annots = mne.Annotations(
         onset=np.array([ann[0] for ann in merged_anns]),
         duration=np.array([ann[1] for ann in merged_anns]),
