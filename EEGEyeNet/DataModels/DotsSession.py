@@ -129,7 +129,7 @@ class DotsSession(BaseSession):
             np.vstack((self.get_data(as_frame=False), et_triggers, ses_triggers, dot_triggers)),
             unit_conversion.values[:, np.newaxis]
         )
-        raw = mne.io.RawArray(channels, info, verbose=verbose)
+        raw = mne.io.RawArray(channels, info, verbose=verbose).drop_channels('ET_TIME', on_missing='ignore')
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             raw.set_montage("GSN-HydroCel-128", on_missing='ignore', verbose=verbose)
