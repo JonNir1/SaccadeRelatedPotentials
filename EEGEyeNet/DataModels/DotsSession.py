@@ -133,6 +133,19 @@ class DotsSession(BaseSession):
         with warnings.catch_warnings():
             warnings.simplefilter("ignore", category=RuntimeWarning)
             raw.set_montage("GSN-HydroCel-128", on_missing='ignore', verbose=verbose)
+
+        # set channel types for eyetracking data
+        eyetracking_channel_mapping = {
+            'L-GAZE-X': ('eyegaze', 'px', 'left', 'x'), 'L-GAZE-Y': ('eyegaze', 'px', 'left', 'y'),
+            'R-GAZE-X': ('eyegaze', 'px', 'right', 'x'), 'R-GAZE-Y': ('eyegaze', 'px', 'right', 'y'),
+            'L-AREA': ('pupil', 'au', 'left'), 'R-AREA': ('pupil', 'au', 'right'),
+        }
+        is_eyetracking_channel = np.isin(raw.get_channel_types(), ['eyegaze', 'pupil'])
+        eyetracking_channel_names = np.array(raw.ch_names)[is_eyetracking_channel]
+        eyetracking_channel_mapping = {
+            k: v for k, v in eyetracking_channel_mapping.items() if k in eyetracking_channel_names
+        }
+        raw = mne.preprocessing.eyetracking.set_channel_types_eyetrack(raw, mapping=eyetracking_channel_mapping)
         return raw, event_dict
 
     @staticmethod
