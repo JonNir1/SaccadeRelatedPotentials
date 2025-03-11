@@ -109,12 +109,13 @@ class DotsSession(BaseSession):
             raise AssertionError("Unexpected event code in stim triggers")
 
         # create MNE Info object
-        chanlocs = self.get_channel_locations()
+        chan_locs = self.get_channel_locations()
         info = mne.create_info(
-            ch_names=chanlocs['labels'].tolist() + ['STI_ET', 'STI_SES', 'STI_DOT'],
-            ch_types=chanlocs['type'].tolist() + ['stim', 'stim', 'stim'],
+            ch_names=chan_locs['labels'].tolist() + ['STI_ET', 'STI_SES', 'STI_DOT'],
+            ch_types=chan_locs['type'].tolist() + ['stim', 'stim', 'stim'],
             sfreq=self.sampling_rate,
         )
+
         # create MNE RawArray object
         unit_conversion = pd.Series(info.get_channel_types()).map(
             dict(
