@@ -93,7 +93,7 @@ def apply_notch_filter(
     new_raw = raw if inplace else raw.copy()
     channel_types = ["eeg", "eog"] if include_eog else ["eeg"]
     freqs = np.arange(freq, 1 + freq * multiplications, freq)
-    if not suppress_warning and np.any(freqs >= nyquist):
+    if not suppress_warnings and np.any(freqs >= nyquist):
         warnings.warn(f"Ignoring frequencies above the Nyquist frequency ({nyquist}Hz).", UserWarning)
     freqs = freqs[freqs < nyquist].tolist()
     new_raw.notch_filter(freqs=freqs, picks=channel_types)
