@@ -84,12 +84,18 @@ def apply_notch_filter(
         multiplications: int = 5,
         include_eog: bool = True,
         inplace: bool = False,
+        suppress_warnings: bool = False,
 ) -> mne.io.Raw:
     """ Applies a notch filter to the given raw data. """
+    nyquist = raw.info['sfreq'] / 2
+    assert 0 < freq < nyquist, f"Notch frequency must be positive and less than the Nyquist frequency ({nyquist}Hz)"
     assert multiplications > 0, "multiplications must be positive"
     new_raw = raw if inplace else raw.copy()
     channel_types = ["eeg", "eog"] if include_eog else ["eeg"]
-    freqs = np.arange(freq, 1 + freq * multiplications, freq).tolist()
+    freqs = np.arange(freq, 1 + freq * multiplications, freq)
+    if not suppress_warning and np.any(freqs >= nyquist):
+        warnings.warn(f"Ignoring frequencies above the Nyquist frequency ({nyquist}Hz).", UserWarning)
+    freqs = freqs[freqs < nyquist].tolist()
     new_raw.notch_filter(freqs=freqs, picks=channel_types)
     return new_raw
 
@@ -101,7 +107,8 @@ def apply_highpass_filter(
         inplace: bool = False,
         suppress_warnings: bool = False,
 ) -> mne.io.Raw:
-    assert min_freq > 0, "min_freq must be positive"
+    nyquist = raw.info['sfreq'] / 2
+    assert 0 < min_freq < nyquist, f"Minimum frequency must be positive and less than the Nyquist frequency ({nyquist}Hz)"
     if not suppress_warnings and min_freq > _MIN_FREQ_WARN_THRESHOLD:
         warnings.warn(
             f"High-pass filter of {min_freq}Hz is unusually high. " +
@@ -121,7 +128,8 @@ def apply_lowpass_filter(
         inplace: bool = False,
         suppress_warnings: bool = False,
 ) -> mne.io.Raw:
-    assert max_freq > 0, "max_freq must be positive"
+    nyquist = raw.info['sfreq'] / 2
+    assert 0 < max_freq < nyquist, f"Maximum frequency must be positive and less than the Nyquist frequency ({nyquist}Hz)"
     if not suppress_warnings:
         if include_eog and max_freq < _MAX_FREQ_WARN_THRESHOLD_WITH_EOG:
             warnings.warn(
