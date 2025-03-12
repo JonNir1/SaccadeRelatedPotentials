@@ -74,10 +74,27 @@ def blink_annotations(
         et_channel: Optional[str] = None,
         et_blink_codes: Optional[Union[int, Set[int]]] = None,
         eog_blink_threshold: Optional[Union[float, str]] = None,
-        ms_before: int = 25,
-        ms_after: int = 25,
+        ms_before: int = 250,
+        ms_after: int = 250,
         merge_within_ms: float = 0.0,
 ):
+    """
+    Detects blinks from eye-tracking and EOG channels and returns annotations marking those periods.
+    By default, annotations are based on EOG detected blinks, using a threshold of 400μV. To prevent EOG blink
+    detection, set the `eog_blink_threshold` parameter to None.
+    To detect blinks from eye-tracking, provide the `et_channel` and `et_blink_codes` parameters. If both arguments are
+    None, no eye-tracking blinks will be detected. If one is None and the other is not, a ValueError will be raised.
+
+    :param raw: MNE Raw object containing the EEG data.
+    :param et_channel: Name of the eye-tracking channel in the raw data, or None to skip eye-tracking blink detection.
+    :param et_blink_codes: Event code(s) for blinks in the eye-tracking channel, or None to skip.
+    :param eog_blink_threshold: Threshold for detecting EOG blinks, 'auto' to use MNE's default threshold, or None to skip.
+    :param ms_before: Number of milliseconds before each blink onset to include in the annotation.
+    :param ms_after: Number of milliseconds after each blink onset to include in the annotation.
+    :param merge_within_ms: Time window (in milliseconds) within which adjacent annotations are merged.
+
+    :return: MNE annotations marking the detected blinks.
+    """
     # eye tracking blink annotations
     if not et_channel and et_blink_codes:
         raise ValueError("`et_channel` must be provided when using eyetracking blinks")
@@ -108,8 +125,8 @@ def _eyetracking_blink_annotation(
         raw: mne.io.Raw,
         et_channel: str,
         blink_codes: Union[int, Set[int]],
-        ms_before: int = 25,
-        ms_after: int = 25,
+        ms_before: int = 250,
+        ms_after: int = 250,
         merge_within_ms: float = 0.0,
 ) -> mne.Annotations:
     """
