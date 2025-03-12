@@ -5,6 +5,8 @@ import mne
 
 import mne_scripts.helpers.utils as u
 
+_EOG_BLINK_LOW_FREQ_CUTOFF, _EOG_BLINK_HIGH_FREQ_CUTOFF = 0.5, 20
+
 
 def voltage_jump_annotations(
         raw: mne.io.Raw,
@@ -67,7 +69,42 @@ def voltage_jump_annotations(
     return _merge_annotations(annotations, merge_within_ms)
 
 
-def eyetracking_blink_annotation(
+def blink_annotations(
+        raw: mne.io.Raw,
+        et_channel: Optional[str] = None,
+        et_blink_codes: Optional[Union[int, Set[int]]] = None,
+        eog_blink_threshold: Optional[Union[float, str]] = None,
+        ms_before: int = 25,
+        ms_after: int = 25,
+        merge_within_ms: float = 0.0,
+):
+    # eye tracking blink annotations
+    if et_channel is None and et_blink_codes is not None:
+        raise ValueError("`et_channel` must be provided when using eyetracking blinks")
+    if et_channel is not None and et_blink_codes is None:
+        raise ValueError("`et_blink_codes` must be provided when using eyetracking blinks")
+    if et_channel is None and et_blink_codes is None:
+        et_blinks = mne.Annotations([], [], [])
+    else:
+        et_blinks = _eyetracking_blink_annotation(
+            raw,
+            et_channel=et_channel, blink_codes=et_blink_codes,
+            ms_before=ms_before, ms_after=ms_after, merge_within_ms=merge_within_ms
+        )
+    # EOG blink annotations
+    if eog_blink_threshold is None:
+        eog_blinks = mne.Annotations([], [], [])
+    else:
+        eog_blinks = _eog_blink_annotation(
+            raw,
+            threshold=eog_blink_threshold,
+            ms_before=ms_before, ms_after=ms_after, merge_within_ms=merge_within_ms
+        )
+    # return concatenated ET & EOG blink annotations
+    return et_blinks + eog_blinks
+
+
+def _eyetracking_blink_annotation(
         raw: mne.io.Raw,
         et_channel: str,
         blink_codes: Union[int, Set[int]],
@@ -122,17 +159,17 @@ def eyetracking_blink_annotation(
     adjusted_durations = adjusted_durations / sfreq  # convert to seconds for MNE
 
     # Create and Return MNE Annotations
-    blink_annotations = mne.Annotations(
+    blink_et_annotations = mne.Annotations(
         onset=adjusted_onsets,
         duration=adjusted_durations,
         description=['blink/et'] * len(adjusted_onsets)
     )
-    return _merge_annotations(blink_annotations, merge_within_ms)
+    return _merge_annotations(blink_et_annotations, merge_within_ms)
 
 
-def eog_blink_annotation(
+def _eog_blink_annotation(
         raw: mne.io.Raw,
-        threshold: Optional[float] = None,
+        threshold: Union[float, str] = 'auto',
         ms_before: int = 250,
         ms_after: int = 250,
         merge_within_ms: float = 0.0,
@@ -141,22 +178,30 @@ def eog_blink_annotation(
     Generate MNE annotations for blinks based on EOG data.
 
     :param raw: MNE Raw object containing the EOG data.
-    :param threshold: threshold for detecting blinks. If None, uses MNE's default threshold.
+    :param threshold: threshold for detecting blinks. If 'auto', uses MNE's default threshold.
     :param ms_before: duration (in milliseconds) before the blink onset to include in the annotation.
     :param ms_after: duration (in milliseconds) after the blink onset to include in the annotation.
     :param merge_within_ms: time window (in milliseconds) within which adjacent annotations are merged.
 
     :return: mne.Annotations object marking the blinks.
     """
-    assert threshold is None or threshold > 0, "threshold must be a positive float or None"
     assert ms_before >= 0, "ms_before must be a non-negative integer"
     assert ms_after >= 0, "ms_after must be a non-negative integer"
+    actual_threshold = None if (isinstance(threshold, str) and threshold.strip().lower() == 'auto') else float(threshold)
+    assert actual_threshold is None or actual_threshold > 0, "threshold must be a positive float or `auto`"
     sfreq = raw.info['sfreq']
     samples_before = u.milliseconds_to_samples(ms_before, sfreq)
     samples_after = u.milliseconds_to_samples(ms_after, sfreq)
-    mne_eog_events = mne.preprocessing.find_eog_events(raw, threshold=threshold, verbose=False)
+    mne_eog_events = mne.preprocessing.find_eog_events(
+        raw,
+        thresh=threshold,
+        reject_by_annotation=False,         # annotate `bad` segments as well
+        l_freq=_EOG_BLINK_LOW_FREQ_CUTOFF,
+        h_freq=_EOG_BLINK_HIGH_FREQ_CUTOFF,
+        verbose=False
+    )
 
-    # Detect Onset Idxs
+    # Detect Onset Indices
     onsets = mne_eog_events[:, 0] - samples_before
     onsets[onsets < 0] = 0
 
@@ -165,12 +210,12 @@ def eog_blink_annotation(
     durations[durations + onsets > raw.n_times] = raw.n_times
 
     # Create and Return MNE Annotations
-    blink_annotations = mne.Annotations(
+    blink_eog_annotations = mne.Annotations(
         onset=onsets / sfreq,           # convert to seconds
         duration=durations / sfreq,     # convert to seconds
         description=['blink/eog'] * len(onsets),
     )
-    return _merge_annotations(blink_annotations, merge_within_ms)
+    return _merge_annotations(blink_eog_annotations, merge_within_ms)
 
 
 def _merge_annotations(annotations: mne.Annotations, merge_within_ms: float = 0.0) -> mne.Annotations:
