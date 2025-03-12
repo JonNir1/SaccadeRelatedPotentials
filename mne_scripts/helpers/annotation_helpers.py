@@ -134,7 +134,9 @@ def _eyetracking_blink_annotation(
     samples_after = u.milliseconds_to_samples(ms_after, sfreq)
 
     # Find blink onsets and offsets
-    et_events = mne.find_events(raw, stim_channel=et_channel, output='onset', shortest_event=1, consecutive=True)
+    et_events = mne.find_events(
+        raw, stim_channel=et_channel, output='onset', shortest_event=1, consecutive=True, verbose=False
+    )
     blink_mask = np.isin(et_events[:, 2], list(blink_codes))
     blink_onsets = et_events[blink_mask, 0]
     blink_offsets = np.zeros_like(blink_onsets)

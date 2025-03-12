@@ -96,7 +96,7 @@ def apply_notch_filter(
     if not suppress_warnings and np.any(freqs >= nyquist):
         warnings.warn(f"Ignoring frequencies above the Nyquist frequency ({nyquist}Hz).", UserWarning)
     freqs = freqs[freqs < nyquist].tolist()
-    new_raw.notch_filter(freqs=freqs, picks=channel_types)
+    new_raw.notch_filter(freqs=freqs, picks=channel_types, verbose=False)
     return new_raw
 
 
@@ -117,7 +117,7 @@ def apply_highpass_filter(
         )
     new_raw = raw if inplace else raw.copy()
     channel_types = ["eeg", "eog"] if include_eog else ["eeg"]
-    new_raw.filter(l_freq=min_freq, h_freq=None, picks=channel_types)
+    new_raw.filter(l_freq=min_freq, h_freq=None, picks=channel_types, verbose=False)
     return new_raw
 
 
@@ -147,6 +147,6 @@ def apply_lowpass_filter(
             pass
     new_raw = raw if inplace else raw.copy()
     channel_types = ["eeg", "eog"] if include_eog else ["eeg"]
-    new_raw.filter(l_freq=None, h_freq=max_freq, picks=channel_types)
+    new_raw.filter(l_freq=None, h_freq=max_freq, picks=channel_types, verbose=False)
     return new_raw
 
