@@ -1,7 +1,8 @@
 import os
 import warnings
-from typing import Dict, Tuple, Union
+from typing import Dict, Tuple
 from enum import IntEnum
+from numbers import Number
 
 import numpy as np
 import pandas as pd
@@ -296,7 +297,7 @@ class DotsSession(BaseSession):
         # replace the 'type' column with integer codes
         new_events = events_df.copy().sort_values('latency')
         new_events['type'] = new_events['type'].map(
-            lambda typ: typ if type(typ) in [int, float, np.uint] else DotsSession.__EVENTS_DICT.get(typ, np.nan)
+            lambda typ: typ if isinstance(typ, Number) else DotsSession.__EVENTS_DICT.get(typ, np.nan)
         )
         is_nan = new_events['type'].isna().any()
         if is_nan:

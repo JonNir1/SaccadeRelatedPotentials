@@ -298,9 +298,9 @@ class BaseSession(ABC):
         num_channels = mat['nbchan']
         num_samples = mat['pnts']
         sampling_rate = mat['srate']
-        xmin, xmax = mat['xmin'], mat['xmax']  # not sure what these are for
+        xmin, xmax = mat['xmin'], mat['xmax']       # not sure what these are for
         ref = mat['ref'].strip().lower()
-        ref = None if ref == "averef" else ref
+        ref = None if ref == "averef" else ref      # 'averef' is the default reference in EEGLAB
 
         # load timestamps and verify inputs
         timestamps = to_vector(mat['times'])  # timestamps in milliseconds: 1 x num_samples
