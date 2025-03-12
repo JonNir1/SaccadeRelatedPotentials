@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from typing import final, Dict
+from typing import final, Optional, Dict, Union
 from enum import StrEnum, IntEnum
 
 import pandas as pd
