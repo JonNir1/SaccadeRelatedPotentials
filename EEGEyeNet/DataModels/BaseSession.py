@@ -1,12 +1,12 @@
 from abc import ABC, abstractmethod
-from typing import final, Optional, Dict, Union
+from typing import final, Dict
 from enum import StrEnum, IntEnum
 
 import pandas as pd
 from pymatreader import read_mat
 from mne.io import Raw
 
-from mne_helpers.utils import *
+from mne_scripts.helpers.utils import *
 
 
 class SessionTaskType(StrEnum):
