@@ -68,7 +68,7 @@ def voltage_jump_annotations(
 
 
 def eyetracking_blink_annotation(
-        raw_data: mne.io.Raw,
+        raw: mne.io.Raw,
         et_channel: str,
         blink_codes: Union[int, Set[int]],
         ms_before: int = 25,
@@ -78,7 +78,7 @@ def eyetracking_blink_annotation(
     """
     Generate MNE annotations for blinks based on eye-tracking events.
 
-    :param raw_data: MNE Raw object containing the eye-tracking data.
+    :param raw: MNE Raw object containing the eye-tracking data.
     :param et_channel: Name of the eye-tracking channel in the raw data.
     :param blink_codes: Event code(s) for blinks.
     :param ms_before: duration (in milliseconds) before the blink onset to include in the annotation.
@@ -92,12 +92,12 @@ def eyetracking_blink_annotation(
     assert ms_before >= 0, "ms_before must be a non-negative integer"
     assert ms_after >= 0, "ms_after must be a non-negative integer"
     blink_codes = blink_codes if isinstance(blink_codes, set) else {blink_codes}  # Convert to set if int
-    sfreq = raw_data.info['sfreq']
+    sfreq = raw.info['sfreq']
     samples_before = u.milliseconds_to_samples(ms_before, sfreq)
     samples_after = u.milliseconds_to_samples(ms_after, sfreq)
 
     # Find blink onsets and offsets
-    et_events = mne.find_events(raw_data, stim_channel=et_channel, output='onset', shortest_event=1, consecutive=True)
+    et_events = mne.find_events(raw, stim_channel=et_channel, output='onset', shortest_event=1, consecutive=True)
     blink_mask = np.isin(et_events[:, 2], list(blink_codes))
     blink_onsets = et_events[blink_mask, 0]
     blink_offsets = np.zeros_like(blink_onsets)
@@ -118,7 +118,7 @@ def eyetracking_blink_annotation(
     blink_durations = blink_offsets - blink_onsets  # duration in samples
     blink_durations[-1] = max(blink_durations[-1], 1)  # Ensure last blink has at least 1 sample
     adjusted_durations = blink_durations + samples_after  # extend duration
-    adjusted_durations[adjusted_durations > raw_data.n_times] = raw_data.n_times
+    adjusted_durations[adjusted_durations > raw.n_times] = raw.n_times
     adjusted_durations = adjusted_durations / sfreq  # convert to seconds for MNE
 
     # Create and Return MNE Annotations
