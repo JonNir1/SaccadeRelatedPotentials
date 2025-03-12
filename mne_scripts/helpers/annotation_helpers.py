@@ -79,11 +79,11 @@ def blink_annotations(
         merge_within_ms: float = 0.0,
 ):
     # eye tracking blink annotations
-    if et_channel is None and et_blink_codes is not None:
+    if not et_channel and et_blink_codes:
         raise ValueError("`et_channel` must be provided when using eyetracking blinks")
-    if et_channel is not None and et_blink_codes is None:
+    if et_channel and not et_blink_codes:
         raise ValueError("`et_blink_codes` must be provided when using eyetracking blinks")
-    if et_channel is None and et_blink_codes is None:
+    if not et_channel and not et_blink_codes:
         et_blinks = mne.Annotations([], [], [])
     else:
         et_blinks = _eyetracking_blink_annotation(
@@ -92,7 +92,7 @@ def blink_annotations(
             ms_before=ms_before, ms_after=ms_after, merge_within_ms=merge_within_ms
         )
     # EOG blink annotations
-    if eog_blink_threshold is None:
+    if not eog_blink_threshold:
         eog_blinks = mne.Annotations([], [], [])
     else:
         eog_blinks = _eog_blink_annotation(
