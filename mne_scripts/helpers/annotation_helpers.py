@@ -194,7 +194,7 @@ def _eog_blink_annotation(
     samples_after = u.milliseconds_to_samples(ms_after, sfreq)
     mne_eog_events = mne.preprocessing.find_eog_events(
         raw,
-        thresh=threshold,
+        thresh=actual_threshold,
         reject_by_annotation=False,         # annotate `bad` segments as well
         l_freq=_EOG_BLINK_LOW_FREQ_CUTOFF,
         h_freq=_EOG_BLINK_HIGH_FREQ_CUTOFF,
