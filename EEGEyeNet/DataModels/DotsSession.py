@@ -303,6 +303,7 @@ class DotsSession(BaseSession):
         if is_nan:
             raise AssertionError("Unexpected event type in events DataFrame")
         new_events['type'] = new_events['type'].replace(
+            # TODO: add the previous dot to the event code for future analysis (e.g. "2\14")
             # replace events "19" and "27" with "1"; and "119" and "127" with "101" - all represent the middle dot
             {1: 1, 19: 1, 27: 1, 101: 101, 119: 101, 127: 101}
         )
