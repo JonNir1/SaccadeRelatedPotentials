@@ -5,7 +5,7 @@ import mne
 
 import mne_scripts.helpers.utils as u
 
-_EOG_BLINK_LOW_FREQ_CUTOFF, _EOG_BLINK_HIGH_FREQ_CUTOFF = 0.5, 20
+_EOG_BLINK_LOW_FREQ_CUTOFF, _EOG_BLINK_HIGH_FREQ_CUTOFF = 0.1, 20
 
 
 def voltage_jump_annotations(
