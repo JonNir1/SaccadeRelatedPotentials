@@ -5,7 +5,8 @@ import pandas as pd
 import mne
 
 import matplotlib
-matplotlib.use('Qt5Agg')
+matplotlib.use('TkAgg')
+# mne.viz.set_browser_backend('qt')
 
 from EEGEyeNet.DataModels.DotsSession import DotsSession
 
@@ -56,8 +57,8 @@ raw.set_channel_types({
 #     # events=mne_events
 # )
 
-# psd = raw.copy().compute_psd(n_fft=512, verbose=False, exclude=[EEG_REF])
-# psd.plot(picks=['eeg', 'eog'])
+psd = raw.copy().compute_psd(n_fft=512, verbose=False, exclude=[EEG_REF])
+psd.plot(picks=['eeg', 'eog'])
 
 # %%
 ##############################################
