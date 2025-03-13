@@ -6,9 +6,13 @@ import mne
 import mne_scripts.helpers.annotation_helpers as ah
 import mne_scripts.helpers.event_helpers as eh
 
+_TRIAL_EPOCH_BEFORE_SEC, _TRIAL_EPOCH_AFTER_SEC = 0.5, 1
+
 _EOG_BLINK_THRESHOLD = 400e-6
 _BLINK_EPOCH_BEFORE_SEC, _BLINK_EPOCH_AFTER_SEC = 0.5, 1
-_TRIAL_EPOCH_BEFORE_SEC, _TRIAL_EPOCH_AFTER_SEC = 0.5, 1
+
+_ICA_NUM_COMPONENTS, _ICA_RANDOM_STATE, _ICA_MAX_ITERS = 20, 42, 800
+_ICA_METHOD = 'picard'  # 'fastica', 'picard', 'infomax'        # TODO: check if 'infomax' is better
 
 
 def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> mne.io.Raw:
@@ -69,12 +73,31 @@ def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> mn
     )
     # create a unified Raw object for ICA
     trial_data = np.hstack(trial_epochs.get_data(verbose=False).copy())     # flatten epochs into 2D array
-    trial_raw = mne.io.RawArray(trial_data, trial_epochs.info)
+    trial_raw = mne.io.RawArray(trial_data, trial_epochs.info, verbose=False)
     blink_data = np.hstack(blink_epochs.get_data(verbose=False).copy())     # flatten epochs into 2D array
     blink_data = np.hstack([blink_data.copy() for _ in range(kwargs.get("blink_epoch_repeats", 1))])
-    blink_raw = mne.io.RawArray(blink_data, blink_epochs.info)
+    blink_raw = mne.io.RawArray(blink_data, blink_epochs.info, verbose=False)
     combined_raw = mne.concatenate_raws([trial_raw, blink_raw], verbose=False)
     return combined_raw
+
+
+def _fit_ica(raw_for_ica: mne.io.Raw, **kwargs) -> mne.preprocessing.ICA:
+    ica = mne.preprocessing.ICA(
+        n_components=kwargs.get("n_components", _ICA_NUM_COMPONENTS),
+        random_state=kwargs.get("random_state", _ICA_RANDOM_STATE),
+        max_iter=kwargs.get("max_iter", _ICA_MAX_ITERS),
+        method=kwargs.get("method", _ICA_METHOD).strip().lower(),
+        fit_params=kwargs.get("fit_params", dict(extended=True))
+    )
+    ica.fit(
+        raw_for_ica,
+        reject=kwargs.get("ica_reject_criteria", dict(eeg=400e-6)),
+        reject_by_annotation=True, picks=["eeg", "eog"],
+    )
+    if kwargs.get("visualize_components", True):
+        # inspect components to make sure ICA worked as expected
+        ica.plot_components(picks=range(20), block=True)
+    return ica
 
 
 def __blink_epochs(
