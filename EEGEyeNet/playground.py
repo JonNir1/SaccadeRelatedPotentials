@@ -35,7 +35,7 @@ mne_events = mne.find_events(
 )
 
 # raw_unreferenced.plot(
-#     # block=True,
+#     block=True,
 #     scalings=VISUALIZATION_SCALING, n_channels=20,
 #     # events=mne_events
 # )
@@ -56,45 +56,90 @@ raw.set_channel_types({
 #     # events=mne_events
 # )
 
+# psd = raw.copy().compute_psd(n_fft=512, verbose=False, exclude=[EEG_REF])
+# psd.plot(picks=['eeg', 'eog'])
+
 # %%
 ##############################################
-# Re-Reference and Filter
+# Filter
+
+import mne_scripts.helpers.raw_helpers as rh
 
 NOTCH_FREQ = 50
 LOW_FREQ, HIGH_FREQ = 0.1, 100
 
-# TODO: check if we need to specify `fir_design` and `picks`
-
 raw_unfiltered = raw.copy()     # keep a copy of the unfiltered data
-raw.filter(         # band-pass filter
-    l_freq=LOW_FREQ, h_freq=HIGH_FREQ,
-    fir_design='firwin',
-    picks=["eeg", "eog"]
-)
-raw.notch_filter(   # remove AC line noise
-    freqs=np.arange(NOTCH_FREQ, 1 + 5 * NOTCH_FREQ, NOTCH_FREQ),
-    fir_design='firwin',
-    picks=["eeg", "eog"]
-)
+raw = rh.apply_lowpass_filter(raw, HIGH_FREQ, include_eog=True, inplace=True, suppress_warnings=True)
+raw = rh.apply_highpass_filter(raw, LOW_FREQ, include_eog=True, inplace=True, suppress_warnings=True)
+raw = rh.apply_notch_filter(raw, NOTCH_FREQ, include_eog=True, inplace=True, suppress_warnings=True)
 
 
 # %%
 ##############################################
-# Detect and Annotate Blinks
+# Annotate Blinks
 
-BEFORE_BLINK, AFTER_BLINK = 25, 25  # annotate 25ms before & after each detected blink
+import mne_scripts.helpers.annotation_helpers as annh
 
-import mne_helpers.ica as mne_ica
+BEFORE_BLINK, AFTER_BLINK = 250, 250    # annotate 250ms before & after each detected blink
+MERGE_BLINKS_MS = 25                    # merge blinks that are within 25ms of each other
 
-blink_annots_et = mne_ica._eyetracking_blink_annotation(raw, 'STI_ET', {215, 216}, BEFORE_BLINK, AFTER_BLINK)
-blink_annots_eog = mne_ica._eog_blink_annotation(raw, BEFORE_BLINK, AFTER_BLINK)
-raw.set_annotations(blink_annots_et + blink_annots_eog)
+raw.set_annotations(annh.blink_annotations(
+    raw, 'STI_ET', {215, 216}, 'auto', BEFORE_BLINK, AFTER_BLINK, MERGE_BLINKS_MS
+))
+
 
 # raw.plot(
 #     events=mne_events,
 #     scalings=VISUALIZATION_SCALING, n_channels=10,
 #     block=True,
 # )
+
+
+# %%
+##############################################
+# ICA
+
+EPOCH_TMIN, EPOCH_TMAX, EPOCH_BASELINE = -0.5, 1.5, (-0.4, -0.05)
+
+
+# extract data from blink epochs
+blink_epochs = mne.Epochs(
+    raw, events=None,       # specify no events to get Epochs from Annotations
+    tmin=EPOCH_TMIN, tmax=EPOCH_TMAX, baseline=EPOCH_BASELINE,
+    reject=None, reject_tmax=0.5, reject_tmin=-0.1,
+    verbose=False,
+)
+blink_raw = mne.io.RawArray(np.hstack(blink_epochs.get_data(verbose=False).copy()), blink_epochs.info, verbose=False)
+
+# extract data from trial epochs
+trial_onset_epochs = mne.Epochs(
+    raw,
+    mne_events, event_id={k: v for k, v in event_dict.items() if k.startswith('stim') and not k.endswith('off')},
+    tmin=EPOCH_TMIN, tmax=EPOCH_TMAX, baseline=EPOCH_BASELINE,
+    verbose=False,
+)
+trial_raw = mne.io.RawArray(
+    np.hstack(trial_onset_epochs.get_data(verbose=False).copy()), trial_onset_epochs.info, verbose=False
+)
+
+# concat blink and trial data
+raw_for_ica = mne.concatenate_raws([trial_raw, blink_raw], verbose=False)
+del trial_raw, blink_raw
+
+# fit ICA
+ica = mne.preprocessing.ICA(
+    n_components=20, random_state=42, max_iter=800, method='picard', fit_params=dict(extended=True),
+)
+ica.fit(raw_for_ica, reject=dict(eeg=400e-6), reject_by_annotation=True, picks=["eeg", "eog"], verbose=True)
+
+ica.plot_components(picks=range(20))
+
+## TODO: START FROM HERE
+
+
+
+
+
 
 # %%
 ##############################################
