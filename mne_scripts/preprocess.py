@@ -93,6 +93,8 @@ def preprocess_raw_fif(path: str, **kwargs) -> mne.io.Raw:
         step2_raw.set_annotations(step3_raw.annotations)
         step2_raw.save(step2_path, overwrite=True)
 
+        step3_raw.save(os.path.join(basedir, f"{filename}-step3.fif"), overwrite=True)
+
     return step3_raw
 
 
