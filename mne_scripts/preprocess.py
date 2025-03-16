@@ -60,6 +60,7 @@ def preprocess_raw_fif(path: str, **kwargs) -> mne.io.Raw:
     :keyword pre_annotation_ms: float. Time (in ms) to annotate before a detected jump. Default is 250 ms.
     :keyword post_annotation_ms: float. Time (in ms) to annotate after a detected jump. Default is 250 ms.
     :keyword merge_within_ms: float. Merge annotations of the same kind if closer than this time (ms). Default is 50 ms.
+    :keyword examine_psd: bool. Whether to inspect the PSD of the data. Default is True.
     :keyword psd_nfft: int. Number of FFT points for PSD estimation. Default is 1024.
 
     __ General Keyword Arguments __
@@ -235,6 +236,7 @@ def _step_3(raw: mne.io.Raw, save_to: str, **kwargs) -> mne.io.Raw:
     :keyword pre_annotation_ms: float. Time (in ms) to annotate before a detected jump. Default is 250 ms.
     :keyword post_annotation_ms: float. Time (in ms) to annotate after a detected jump. Default is 250 ms.
     :keyword merge_within_ms: float. Merge annotations of the same kind if closer than this time (ms). Default is 50 ms.
+    :keyword examine_psd: bool. Whether to inspect the PSD of the data. Default is True.
     :keyword psd_nfft: int. Number of FFT points for PSD estimation. Default is 1024.
     :keyword scalings: dict. MNE scaling for visualization.
     :keyword block: bool. Whether plots block execution for manual inspection (should be True).
@@ -269,17 +271,21 @@ def _step_3(raw: mne.io.Raw, save_to: str, **kwargs) -> mne.io.Raw:
             n_channels=20, scalings=kwargs.get("scalings", _VISUALIZATION_SCALING), block=kwargs.get("block", True)
         )
         # inspect PSD
-        spectrum = step3_raw.copy().compute_psd(
-            picks=['eeg'],
-            n_fft=kwargs.get("psd_nfft", _PSD_FFT_COMPONENTS),
-            reject_by_annotation=True,      # exclude bad periods
-            exclude='bads',                 # exclude bad channels
-            verbose=False,
-        )
-        spectrum.plot(
-            # check if all channels are "bundled" together and reject if a channel is too high/low
-            picks=['eeg'], exclude='bads', block=kwargs.get("block", True)
-        )
+        if kwargs.get("examine_psd", True):
+            # check if all channels are "bundled" together and reject channels that are outside the norm
+            spectrum = step3_raw.copy().compute_psd(
+                picks=['eeg'],
+                n_fft=kwargs.get("psd_nfft", _PSD_FFT_COMPONENTS),
+                reject_by_annotation=True,  # exclude bad periods
+                exclude='bads',             # exclude bad channels
+                verbose=False,
+            )
+            spectrum.plot(picks=['eeg', 'eog'], exclude='bads',)
+            step3_raw.plot(                 # mark bad channels based on PSD inspection
+                n_channels=20, scalings=kwargs.get("scalings", _VISUALIZATION_SCALING), block=kwargs.get("block", True),
+                title="Mark bad channels based on PSD inspection"
+            )
+        # interpolate bad channels
         if kwargs.get("interpolate_bads", True):
             step3_raw.interpolate_bads(reset_bads=True)
         step3_raw.save(save_to, overwrite=True)
