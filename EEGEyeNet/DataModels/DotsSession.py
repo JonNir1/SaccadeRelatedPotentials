@@ -29,11 +29,12 @@ class DotsSession(BaseSession):
         "block_on": 55,
         "block_off": 56,
 
-        "grid_1": 201,
-        "grid_2": 202,
-        "grid_3": 203,
-        "grid_4": 204,
-        "grid_5": 205,
+        f"{__GRID_PREFIX_STR}1": 201,
+        f"{__GRID_PREFIX_STR}2": 202,
+        f"{__GRID_PREFIX_STR}3": 203,
+        f"{__GRID_PREFIX_STR}4": 204,
+        f"{__GRID_PREFIX_STR}5": 205,
+        f"{__GRID_PREFIX_STR}6": 206,
 
         "L_fixation": 211,
         "R_fixation": 212,
