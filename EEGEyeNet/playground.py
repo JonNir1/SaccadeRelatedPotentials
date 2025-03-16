@@ -10,9 +10,10 @@ matplotlib.use('TkAgg')
 
 from EEGEyeNet.DataModels.DotsSession import DotsSession
 
+_SUBJ_ID = "EP12"
 _BASE_PATH = r'C:\Users\jonathanni\Desktop\EEGEyeNet\dots_data\synchronised_min'  # lab
 # _BASE_PATH = r'C:\Users\nirjo\Desktop\SRP\data\EEGEyeNet\dots_data\sunchronised_min'  # home
-_FILE_PATH = r'EP12\EP12_DOTS3_EEG.mat'
+_FILE_PATH = f'{_SUBJ_ID}\{_SUBJ_ID}_DOTS3_EEG.mat'
 FULL_PATH = os.path.join(_BASE_PATH, _FILE_PATH)
 
 EEG_REF = 'Cz'
@@ -57,9 +58,6 @@ raw.set_channel_types({
 #     # events=mne_events
 # )
 
-psd = raw.copy().compute_psd(n_fft=512, verbose=False, exclude=[EEG_REF])
-psd.plot(picks=['eeg', 'eog'])
-
 # %%
 ##############################################
 # Filter
@@ -74,6 +72,9 @@ raw = rh.apply_lowpass_filter(raw, HIGH_FREQ, include_eog=True, inplace=True, su
 raw = rh.apply_highpass_filter(raw, LOW_FREQ, include_eog=True, inplace=True, suppress_warnings=True)
 raw = rh.apply_notch_filter(raw, NOTCH_FREQ, include_eog=True, inplace=True, suppress_warnings=True)
 
+
+# psd = raw.copy().compute_psd(n_fft=512, verbose=False, exclude=[EEG_REF])
+# psd.plot(picks=['eeg', 'eog'])
 
 # %%
 ##############################################
@@ -101,7 +102,6 @@ raw.set_annotations(annh.blink_annotations(
 # ICA
 
 EPOCH_TMIN, EPOCH_TMAX, EPOCH_BASELINE = -0.5, 1.5, (-0.4, -0.05)
-
 
 # extract data from blink epochs
 blink_epochs = mne.Epochs(
@@ -133,9 +133,34 @@ ica = mne.preprocessing.ICA(
 )
 ica.fit(raw_for_ica, reject=dict(eeg=400e-6), reject_by_annotation=True, picks=["eeg", "eog"], verbose=True)
 
-ica.plot_components(picks=range(20))
-
 ## TODO: START FROM HERE
+
+# ica.plot_components(picks=range(20))
+#
+# # Gal's step 9-10
+# ica.plot_sources(raw)
+# ica.plot_properties(trial_onset_epochs, picks=ica.exclude, psd_args={'fmax': 40})
+#
+# # Gal's step 11
+# ica_raw = ica.get_sources(raw)
+# ch_dict = {name: "eeg" for name in ica_raw.ch_names}
+# ica_raw.set_channel_types(ch_dict)
+# ica_raw.info["bads"] = []
+# ica_raw.compute_psd(
+#     picks=list(np.array(ica_raw.ch_names)[ica.exclude]),
+#     n_overlap=int(0.2 * raw.info['sfreq']),
+#     n_fft=int(2 * raw.info['sfreq'])
+# ).plot()
+
+# # Gal's step 12: apply ica
+# unfiltered_raw_unclean=unfiltered_raw.copy()
+# unfiltered_raw = ica.apply(unfiltered_raw)
+# unfiltered_raw.interpolate_bads()
+# unfiltered_raw.plot(n_channels=40, duration=10, events=events_updated)  # make sure you don't see blinks
+# exclusions = pd.DataFrame({"excluded": ica.exclude})
+# exclusions.to_csv(join(save_dir, f"sub-{subject_num}{add}-{low_cutoff_freq:.2f}hpf-infomax_ex-ica-rejected.csv"))
+# unfiltered_raw.save(join(save_dir, f"sub-{subject_num}{add}-unfiltered-clean-raw.fif"), overwrite=True)
+
 
 
 
