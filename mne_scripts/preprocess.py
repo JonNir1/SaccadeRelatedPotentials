@@ -145,7 +145,10 @@ def _step_1(raw: mne.io.Raw, save_to: str, **kwargs) -> mne.io.Raw:
         if "resample_freq" in kwargs.keys():
             step1_raw = rawh.resample(step1_raw, kwargs.get("resample_freq"), inplace=True)
         # inspect for noisy/silent channels
-        step1_raw.plot(scalings=kwargs.get("scalings", _VISUALIZATION_SCALING), block=kwargs.get("block", True))
+        step1_raw.plot(
+            scalings=kwargs.get("scalings", _VISUALIZATION_SCALING), block=kwargs.get("block", True),
+            title="Mark very noisy/completely silent channels"
+        )
         if kwargs.get("interpolate_bads", True):
             step1_raw.interpolate_bads(reset_bads=True)
         step1_raw.save(save_to, overwrite=True)
@@ -268,7 +271,8 @@ def _step_3(raw: mne.io.Raw, save_to: str, **kwargs) -> mne.io.Raw:
         )
         step3_raw.set_annotations(jump_annotations)
         step3_raw.plot(     # verify periods of bad data
-            n_channels=20, scalings=kwargs.get("scalings", _VISUALIZATION_SCALING), block=kwargs.get("block", True)
+            n_channels=20, scalings=kwargs.get("scalings", _VISUALIZATION_SCALING), block=kwargs.get("block", True),
+            title="Verify periods of bad data"
         )
         # inspect PSD
         if kwargs.get("examine_psd", True):
