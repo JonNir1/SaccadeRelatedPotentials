@@ -1,3 +1,4 @@
+import copy
 from abc import ABC, abstractmethod
 from typing import final, Optional, Dict, Union
 from enum import StrEnum, IntEnum
@@ -178,7 +179,7 @@ class BaseSession(ABC):
 
     @final
     def get_data(self, as_frame: bool = True) -> Union[np.ndarray, pd.DataFrame]:
-        data = self._data
+        data = copy.deepcopy(self._data)
         if not as_frame:
             return data
         data = pd.DataFrame(data, index=self.get_channel_labels())
