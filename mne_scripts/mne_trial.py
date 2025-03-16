@@ -18,6 +18,7 @@ raw.filter(1., 40.)
 
 raw.set_eeg_reference(ref_channels=[EEG_REF])
 spectrum = raw.copy().compute_psd(n_fft=512, verbose=False, exclude=[EEG_REF])
+print((spectrum.data.min(), spectrum.data.max()))
 
 spectrum.plot(average=False, picks=['eeg', 'eog'])
 
