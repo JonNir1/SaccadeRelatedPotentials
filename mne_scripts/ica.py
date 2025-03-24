@@ -5,6 +5,7 @@ import mne
 
 import mne_scripts.helpers.annotation_helpers as ah
 import mne_scripts.helpers.event_helpers as eh
+import mne_scripts.helpers.raw_helpers as rh
 
 _TRIAL_EPOCH_BEFORE_SEC, _TRIAL_EPOCH_AFTER_SEC = 0.5, 1
 
@@ -24,6 +25,10 @@ def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> mn
 
     :param raw: MNE Raw object containing the EEG data.
     :param trial_events: Dictionary of event labels and their corresponding event codes.
+
+    __General Keywords__
+    :keyword min_freq: Minimum frequency for high-pass filtering the data. Default is None. Using a high-pass filter
+        can help remove slow drifts and improve ICA performance.
 
     __Trial Epoch Keywords__
     :keyword trial_epoch_sec_before: Number of seconds before each trial onset to include in the epoch. Default is 0.5s.
@@ -46,6 +51,11 @@ def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> mn
 
     :returns: A new MNE Raw object containing concatenated EEG data from trial and blink epochs.
     """
+    # high-pass filter the data if necessary
+    min_freq = kwargs.get("min_freq", None)
+    if min_freq is not None:
+        raw = rh.apply_highpass_filter(raw, min_freq, include_eog=False, inplace=False)
+
     # extract trial epochs
     all_events = eh.extract_events(raw, channel='all')
     trial_epochs_sec_before = kwargs.get("trial_epoch_sec_before", _TRIAL_EPOCH_BEFORE_SEC)
