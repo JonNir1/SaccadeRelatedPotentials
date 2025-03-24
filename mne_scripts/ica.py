@@ -12,7 +12,7 @@ _EOG_BLINK_THRESHOLD = 400e-6
 _BLINK_EPOCH_BEFORE_SEC, _BLINK_EPOCH_AFTER_SEC = 0.5, 1
 
 _ICA_NUM_COMPONENTS, _ICA_RANDOM_STATE, _ICA_MAX_ITERS = 20, 42, 800
-_ICA_METHOD = 'picard'  # 'fastica', 'picard', 'infomax'        # TODO: check if 'infomax' is better
+_ICA_METHOD = 'infomax'     # 'fastica', 'picard', 'infomax'        # TODO: check if 'picard' is better
 
 
 def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> mne.io.Raw:
