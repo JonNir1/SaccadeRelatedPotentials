@@ -10,7 +10,6 @@ _MIN_FREQ, _MAX_FREQ, _NOTCH_FREQ = 0.1, 100, 50
 _REF_ELECTRODE = "average"
 _VOLTAGE_JUMP_THRESHOLD, _VOLTAGE_JUMP_DURATION_MS, _VOLTAGE_JUMP_MIN_RATIO = 2e-4, 100, 0.5
 _BAD_VOLTAGE_PRE_MS, _BAD_VOLTAGE_POST_MS, _BAD_VOLTAGE_MERGE_MS = 250, 250, 50
-_PSD_FFT_COMPONENTS = 1024
 _VISUALIZATION_SCALING = dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2)
 
 
@@ -61,7 +60,6 @@ def preprocess_raw_fif(path: str, **kwargs) -> mne.io.Raw:
     :keyword post_annotation_ms: float. Time (in ms) to annotate after a detected jump. Default is 250 ms.
     :keyword merge_within_ms: float. Merge annotations of the same kind if closer than this time (ms). Default is 50 ms.
     :keyword examine_psd: bool. Whether to inspect the PSD of the data. Default is True.
-    :keyword psd_nfft: int. Number of FFT points for PSD estimation. Default is 1024.
 
     __ General Keyword Arguments __
     :keyword scalings: dict. MNE scaling for visualization.
@@ -242,7 +240,6 @@ def _step_3(raw: mne.io.Raw, save_to: str, **kwargs) -> mne.io.Raw:
     :keyword post_annotation_ms: float. Time (in ms) to annotate after a detected jump. Default is 250 ms.
     :keyword merge_within_ms: float. Merge annotations of the same kind if closer than this time (ms). Default is 50 ms.
     :keyword examine_psd: bool. Whether to inspect the PSD of the data. Default is True.
-    :keyword psd_nfft: int. Number of FFT points for PSD estimation. Default is 1024.
     :keyword scalings: dict. MNE scaling for visualization.
     :keyword block: bool. Whether plots block execution for manual inspection (should be True).
     :keyword interpolate_bads: bool. Whether to interpolate bad channels. Default is True.
@@ -281,7 +278,8 @@ def _step_3(raw: mne.io.Raw, save_to: str, **kwargs) -> mne.io.Raw:
             # check if all channels are "bundled" together and reject channels that are outside the norm
             spectrum = step3_raw.copy().compute_psd(
                 picks=['eeg'],
-                n_fft=kwargs.get("psd_nfft", _PSD_FFT_COMPONENTS),
+                n_fft=int(2 * raw.info['sfreq']),
+                n_overlap=int(0.1 * raw.info['sfreq']),
                 reject_by_annotation=True,  # exclude bad periods
                 exclude='bads',             # exclude bad channels
                 verbose=False,
