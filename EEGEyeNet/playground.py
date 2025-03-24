@@ -131,26 +131,31 @@ del trial_raw, blink_raw
 ica = mne.preprocessing.ICA(
     n_components=20, random_state=42, max_iter=800, method='picard', fit_params=dict(extended=True),
 )
-ica.fit(raw_for_ica, reject=dict(eeg=400e-6), reject_by_annotation=True, picks=["eeg", "eog"], verbose=True)
+ica.fit(raw_for_ica, reject=dict(eeg=400e-6), reject_by_annotation=True, picks=["eeg", "eog"], verbose=False)
 
-## TODO: START FROM HERE
 
-# ica.plot_components(picks=range(20))
+# Gal's step 9-10
+# import matplotlib.pyplot as plt
+
+# ica.plot_components(picks=range(20), show=False)
 #
-# # Gal's step 9-10
 # ica.plot_sources(raw)
-# ica.plot_properties(trial_onset_epochs, picks=ica.exclude, psd_args={'fmax': 40})
+#
+# ica.plot_properties(trial_onset_epochs, psd_args={'fmax': 40}, verbose=False, picks=0)
 #
 # # Gal's step 11
 # ica_raw = ica.get_sources(raw)
-# ch_dict = {name: "eeg" for name in ica_raw.ch_names}
-# ica_raw.set_channel_types(ch_dict)
+# ica_raw.set_channel_types({name: "eeg" for name in ica_raw.ch_names})
 # ica_raw.info["bads"] = []
 # ica_raw.compute_psd(
 #     picks=list(np.array(ica_raw.ch_names)[ica.exclude]),
 #     n_overlap=int(0.2 * raw.info['sfreq']),
-#     n_fft=int(2 * raw.info['sfreq'])
+#     n_fft=int(2 * raw.info['sfreq']),
+#     fmax=100,
 # ).plot()
+
+
+# TODO: continue from here!
 
 # # Gal's step 12: apply ica
 # unfiltered_raw_unclean=unfiltered_raw.copy()
@@ -160,8 +165,6 @@ ica.fit(raw_for_ica, reject=dict(eeg=400e-6), reject_by_annotation=True, picks=[
 # exclusions = pd.DataFrame({"excluded": ica.exclude})
 # exclusions.to_csv(join(save_dir, f"sub-{subject_num}{add}-{low_cutoff_freq:.2f}hpf-infomax_ex-ica-rejected.csv"))
 # unfiltered_raw.save(join(save_dir, f"sub-{subject_num}{add}-unfiltered-clean-raw.fif"), overwrite=True)
-
-
 
 
 
