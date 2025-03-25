@@ -62,7 +62,9 @@ def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> (m
         if not specified, defaults to (-1 * blink_epoch_sec_before, 0).
     :keyword blink_epoch_repeats: Number of times to repeat the blink epochs in the final ICA data. Default is 1.
 
-    :returns: A new MNE Raw object containing concatenated EEG data from trial and blink epochs.
+    :returns:
+        - raw_for_ica: A new MNE Raw object containing concatenated EEG data from trial and blink epochs.
+        - trial_epochs: MNE Epochs object containing the trial epochs.
     """
     # high-pass filter the data if necessary
     min_freq = kwargs.get("min_freq", None)
