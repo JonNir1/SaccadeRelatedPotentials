@@ -65,7 +65,7 @@ def voltage_jump_annotations(
     onsets[onsets < 0] = 0
     durations = np.full_like(onsets, (pre_annotation_ms + post_annotation_ms) / u.MILLISECONDS_IN_SECOND)
     durations[onsets + durations > raw.times[-1]] = raw.times[-1]
-    annotations = mne.Annotations(onset=onsets, duration=durations, description=['bad/voltage'] * len(onsets))
+    annotations = mne.Annotations(onset=onsets, duration=durations, description=['bad_voltage'] * len(onsets))
     return _merge_annotations(annotations, merge_within_ms)
 
 
@@ -181,7 +181,7 @@ def _eyetracking_blink_annotation(
     blink_et_annotations = mne.Annotations(
         onset=adjusted_onsets,
         duration=adjusted_durations,
-        description=['blink/et'] * len(adjusted_onsets)
+        description=['blink_et'] * len(adjusted_onsets)
     )
     return _merge_annotations(blink_et_annotations, merge_within_ms)
 
@@ -232,7 +232,7 @@ def _eog_blink_annotation(
     blink_eog_annotations = mne.Annotations(
         onset=onsets / sfreq,           # convert to seconds
         duration=durations / sfreq,     # convert to seconds
-        description=['blink/eog'] * len(onsets),
+        description=['blink_eog'] * len(onsets),
     )
     return _merge_annotations(blink_eog_annotations, merge_within_ms)
 
