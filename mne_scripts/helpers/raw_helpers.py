@@ -1,5 +1,5 @@
 import warnings
-from typing import Optional, List
+from typing import Optional, Union, List
 from numbers import Number
 
 import numpy as np
@@ -10,15 +10,16 @@ import mne_scripts.helpers.event_helpers as evh
 _MIN_FREQ_WARN_THRESHOLD, _MAX_FREQ_WARN_THRESHOLD_WITH_EOG, _MAX_FREQ_WARN_THRESHOLD_NO_EOG = 0.5, 100, 30
 
 
-def resample(raw: mne.io.Raw, resample_freq: float, inplace: bool = False) -> mne.io.Raw:
-    """ Resample the data to a new frequency. """
+def resample(raw: mne.io.Raw, resample_freq: float, inplace: bool = False) -> (mne.io.Raw, np.ndarray):
+    """ Resample the data to a new frequency, and return the new raw object and the updated events. """
     if not isinstance(resample_freq, Number):
         raise TypeError("`resample_freq` must be a number")
     if resample_freq <= 0:
         raise ValueError("`resample_freq` must be positive")
     new_raw = raw if inplace else raw.copy()
     events = evh.extract_events(new_raw, channel='all')
-    return new_raw.resample(sfreq=float(resample_freq), events=events, verbose=False)
+    new_raw, new_events = new_raw.resample(sfreq=float(resample_freq), events=events, verbose=False)
+    return new_raw, new_events
 
 
 def set_montage(raw: mne.io.Raw, montage: Optional[str] = None, overwrite: bool = False) -> mne.io.Raw:
@@ -34,13 +35,17 @@ def set_montage(raw: mne.io.Raw, montage: Optional[str] = None, overwrite: bool 
     return new_raw
 
 
-def set_reference(raw: mne.io.Raw, ref_channel: Optional[str] = "average", include_eog: bool = True) -> mne.io.Raw:
+def set_reference(
+        raw: mne.io.Raw, ref_channel: Optional[Union[List[str], str]] = "average", include_eog: bool = True
+) -> mne.io.Raw:
     """
     Re-reference the EEG data to a new reference channel.
     If `include_eog` is True, also re-references EOG channels to the same reference.
     NOTE: if `include_eog` is True and `ref_channel` is "average", the EOG channels will be included in the average.
     """
     new_raw = raw.copy()
+    if isinstance(ref_channel, str) and ref_channel.lower() != "average":
+        ref_channel = [ref_channel]
     if not include_eog:
         new_raw.set_eeg_reference(ref_channels=ref_channel, ch_type='eeg', projection=False, verbose=False)
         return new_raw
@@ -81,21 +86,25 @@ def remap_channels(
 def apply_notch_filter(
         raw: mne.io.Raw,
         freq: float,
-        multiplications: int = 5,
         include_eog: bool = True,
         inplace: bool = False,
         suppress_warnings: bool = False,
 ) -> mne.io.Raw:
     """ Applies a notch filter to the given raw data. """
+    assert freq > 0, f"Notch frequency must be positive"
     nyquist = raw.info['sfreq'] / 2
-    assert 0 < freq < nyquist, f"Notch frequency must be positive and less than the Nyquist frequency ({nyquist}Hz)"
-    assert multiplications > 0, "multiplications must be positive"
-    new_raw = raw if inplace else raw.copy()
+    if not suppress_warnings and freq >= nyquist:
+        warnings.warn(
+            f"Notch filter frequency ({freq:1f}Hz) " +
+            f"should be less than the Nyquist frequency ({nyquist:1f}Hz). " +
+            "No filter applied.",
+            UserWarning
+        )
+        return raw
+    freqs = np.arange(freq, nyquist, freq).tolist()
+    assert len(freqs) > 0   # ensures at least one frequency is under Nyquist
     channel_types = ["eeg", "eog"] if include_eog else ["eeg"]
-    freqs = np.arange(freq, 1 + freq * multiplications, freq)
-    if not suppress_warnings and np.any(freqs >= nyquist):
-        warnings.warn(f"Ignoring frequencies above the Nyquist frequency ({nyquist}Hz).", UserWarning)
-    freqs = freqs[freqs < nyquist].tolist()
+    new_raw = raw if inplace else raw.copy()
     new_raw.notch_filter(freqs=freqs, picks=channel_types, verbose=False)
     return new_raw
 
@@ -149,4 +158,3 @@ def apply_lowpass_filter(
     channel_types = ["eeg", "eog"] if include_eog else ["eeg"]
     new_raw.filter(l_freq=None, h_freq=max_freq, picks=channel_types, verbose=False)
     return new_raw
-
