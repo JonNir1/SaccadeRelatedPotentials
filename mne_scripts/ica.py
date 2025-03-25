@@ -18,14 +18,72 @@ _ICA_METHOD = 'infomax'     # 'fastica', 'picard', 'infomax'        # TODO: chec
 _ICA_PSD_FMAX = 60
 
 
-def run_ica(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs):
+def run_ica_on_raw(
+        raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs
+) -> (mne.io.Raw, mne.preprocessing.ICA):
     """
-    __General Keywords__
+    Run Independent Component Analysis (ICA) on the provided raw data to identify and remove artifacts, following these
+    steps:
+    1- Data Preparation:
+        1a) Apply a high-pass filter to the data to remove slow drifts and improve ICA performance.
+        1b) Extract trial epochs from the raw data based on the provided event codes.
+        1c) Extract blink epochs from eye-tracking and EOG channels, and optionally repeat them multiple times.
+        1d) Concatenate the trial and blink epochs into a single Raw object for ICA training.
+    2- ICA Fitting:
+        Fit an ICA model to the concatenated data, using the specified number of components and algorithm.
+    3- Visualization:
+        Plot the ICA components as topographic maps and time series, and optionally plot PSD of the ICA sources as well
+        as individual component properties (time-course, PSD, etc.). The user can inspect the plots and identify bad
+        components to exclude from the data.
+    4- Apply ICA:
+        Apply the fitted ICA model to the raw data to remove artifacts, and interpolate bad channels in the cleaned
+        data. The cleaned data is then visualized to verify the results.
+    5- Return the cleaned Raw object and the ICA object for further analysis.
+
+    :param raw: MNE Raw object containing the EEG data.
+    :param trial_events: Dictionary of event labels and their corresponding event codes.
+
+    __Data Prep Keywords__
     :keyword min_freq: Minimum frequency for high-pass filtering the data. Default is None. Using a high-pass filter
         can help remove slow drifts and improve ICA performance.
     :keyword epoch_with_eog: Whether to include EOG channels in the epoch data. Default is False.
+
+    :keyword trial_epoch_sec_before: Number of seconds before each trial onset to include in the epoch. Default is 0.5s.
+    :keyword trial_epoch_sec_after: Number of seconds after each trial onset to include in the epoch. Default is 1s.
+    :keyword trial_epoch_baseline_sec: Tuple of (start, end) times for baseline correction relative to each trial onset.
+        if not specified, defaults to (-1 * trial_epoch_sec_before, 0).
+    :keyword trial_reject_criteria: Dictionary of rejection criteria for trial epochs. Default is None.
+    :keyword trial_reject_criteria_tmin: Minimum time for rejection criteria. Default is None.
+    :keyword trial_reject_criteria_tmax: Maximum time for rejection criteria. Default is None.
+
+    :keyword et_channel: Name of the eye-tracking channel in the raw data, or None to skip eye-tracking blink detection.
+    :keyword et_blink_codes: Single or set of event codes that indicate a blink in the eye-tracking channel, or None to skip.
+    :keyword eog_blink_threshold: Threshold for detecting EOG blinks, 'auto' to use MNE's default threshold, or None to skip.
+    :keyword blink_epoch_sec_before: Number of seconds before each blink onset to include in the epoch. Default is 0.5s.
+    :keyword blink_epoch_sec_after: Number of seconds after each blink onset to include in the epoch. Default is 1s.
+    :keyword blink_epoch_baseline_sec: Tuple of (start, end) times for baseline correction relative to each blink onset.
+        if not specified, defaults to (-1 * blink_epoch_sec_before, 0).
+    :keyword blink_epoch_repeats: Number of times to repeat the blink epochs in the final ICA data. Default is 1.
+
+    __ICA Keywords__
+    :keyword num_components: Number of components to extract from the data. Default is 20.
+    :keyword random_state: Random seed for the ICA algorithm. Default is 42.
+    :keyword max_iter: Maximum number of iterations for the ICA algorithm. Default is 800.
+    :keyword method: ICA algorithm to use, one of 'fastica', 'picard', or 'infomax'. Default is 'infomax'.
+    :keyword fit_params: Additional parameters to pass to the ICA fit method. Default is {'extended': True}.
+    :keyword ica_reject_criteria: Dictionary of rejection criteria for ICA fitting. Default is {'eeg': 400e-6}.
+
+    __Visualization Keywords__
+    :keyword plot_single_components: Whether to plot individual component properties. Default is False.
+    :keyword plot_ica_psd: Whether to plot the PSD of the ICA sources. Default is False.
+
+    :returns: Tuple of cleaned Raw object and ICA object.
     """
-    return None
+    raw_for_ica, trial_epochs = _prepare_data(raw, trial_events, **kwargs)
+    ica = _fit_ica(raw_for_ica, **kwargs)
+    _visualize_ica(ica, raw, trial_epochs, **kwargs)
+    cleaned_raw = _apply_ica(ica, raw, interpolate_bads=True)
+    return cleaned_raw, ica
 
 
 def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> (mne.io.Raw, mne.Epochs):
@@ -145,16 +203,18 @@ def _visualize_ica(
 
     :param ica: ICA object containing the fitted ICA model.
     :param raw: Raw object containing the EEG data.
-    :param trial_epochs: Epochs object containing the trial epochs for plotting individual component properties, or None
-        to skip this step.
+    :param trial_epochs: Optional Epochs object. If provided, show each ICA component's properties in regard to the
+        trial epochs, and otherwise ICA component properties are plotted with respect to the raw data.
+    :keyword plot_single_components: Whether to plot individual component properties. Default is True.
     :keyword plot_ica_psd: Whether to plot the PSD of the ICA sources. Default is False.
     """
     num_components = ica.n_components
     ica.plot_components(picks=range(num_components))
     ica.plot_sources(raw)
-    if trial_epochs is not None:
+    if kwargs.get("plot_single_components", True):
+        props_plotter = raw if trial_epochs is None else trial_epochs
         for i in range(num_components):
-            ica.plot_properties(trial_epochs, picks=i, psd_args={'fmax': _ICA_PSD_FMAX}, verbose=False)
+            ica.plot_properties(props_plotter, picks=i, psd_args={'fmax': _ICA_PSD_FMAX}, verbose=False)
     if kwargs.get("plot_ica_psd", False):
         ica_raw = ica.get_sources(raw)
         ica_raw.set_channel_types({name: "eeg" for name in ica_raw.ch_names})
@@ -172,9 +232,29 @@ def _visualize_ica(
     return
 
 
-def _apply_ica(ica: mne.preprocessing.ICA, raw: mne.io.Raw) -> mne.io.Raw:
-    # TODO: Continue from here
-    return None
+def _apply_ica(
+        ica: mne.preprocessing.ICA,
+        raw: mne.io.Raw,
+        interpolate_bads: bool = True,
+) -> mne.io.Raw:
+    """
+    Apply the fitted ICA model to the raw data to remove artifacts, and visualize the cleaned data to verify the results.
+
+    :param ica: Fitted ICA model to apply to the raw data.
+    :param raw: Raw object containing the EEG data.
+    :param interpolate_bads: Whether to interpolate bad channels in the cleaned data. Default is True.
+
+    :return: Raw object containing the cleaned EEG data.
+    """
+    cleaned_raw = ica.apply(raw.copy())     # copy to avoid modifying the original raw data
+    if interpolate_bads:
+        cleaned_raw.interpolate_bads()
+    cleaned_raw.plot(
+        n_channels=20,
+        title="ICA Cleaned Data :: Check for Remaining Artifacts!",
+        scalings=dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2),
+    )
+    return cleaned_raw
 
 
 
