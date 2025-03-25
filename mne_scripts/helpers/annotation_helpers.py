@@ -65,7 +65,7 @@ def voltage_jump_annotations(
     onsets[onsets < 0] = 0
     durations = np.full_like(onsets, (pre_annotation_ms + post_annotation_ms) / u.MILLISECONDS_IN_SECOND)
     durations[onsets + durations > raw.times[-1]] = raw.times[-1]
-    annotations = mne.Annotations(onset=onsets, duration=durations, description=['voltage_jump'] * len(onsets))
+    annotations = mne.Annotations(onset=onsets, duration=durations, description=['bad/voltage'] * len(onsets))
     return _merge_annotations(annotations, merge_within_ms)
 
 
