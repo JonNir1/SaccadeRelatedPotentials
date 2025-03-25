@@ -121,7 +121,7 @@ def apply_highpass_filter(
     if not suppress_warnings and min_freq > _MIN_FREQ_WARN_THRESHOLD:
         warnings.warn(
             f"High-pass filter of {min_freq}Hz is unusually high. " +
-            "Consider setting the cutoff below {_MIN_FREQ_WARN_THRESHOLD}Hz.",
+            f"Consider setting the cutoff below {_MIN_FREQ_WARN_THRESHOLD}Hz.",
             UserWarning
         )
     new_raw = raw if inplace else raw.copy()
