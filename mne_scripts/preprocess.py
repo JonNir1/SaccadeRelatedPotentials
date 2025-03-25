@@ -72,11 +72,11 @@ def preprocess_raw_fif(path: str, **kwargs) -> mne.io.Raw:
     """
     basedir, filename = os.path.dirname(path), os.path.basename(path).split('.')[0]
     raw = mne.io.Raw(path)
-    step1_path = os.path.join(basedir, f"{filename}-step1.fif")
+    step1_path = os.path.join(basedir, f"preprocessed-step1-{filename}.fif")
     step1_raw = _step_1(raw, step1_path, **kwargs)
-    step2_path = os.path.join(basedir, f"{filename}-step2.fif")
+    step2_path = os.path.join(basedir, f"preprocessed-step2-{filename}.fif")
     step2_raw = _step_2(step1_raw, step2_path, **kwargs)
-    step3_raw = _step_3(step2_raw, os.path.join(basedir, f"{filename}-step3.fif"), **kwargs)
+    step3_raw = _step_3(step2_raw, os.path.join(basedir, f"preprocessed-step3-{filename}.fif"), **kwargs)
 
     if kwargs.get("copy_metadata", True):
         raw.info = step3_raw.info
