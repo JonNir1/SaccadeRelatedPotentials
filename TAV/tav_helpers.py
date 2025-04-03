@@ -33,6 +33,7 @@ def create_filter(name: str) -> (np.ndarray, np.ndarray):
         # return b, a
         raise NotImplementedError
     if name == 'wavelet':
+        # import pywt
         # TODO
         # wavelet = pywt.ContinuousWavelet("gaus1", dtype=float)
         # phi, psi, _x = wavelet.wavefun(level=3)
