@@ -35,7 +35,7 @@ def load_or_calc(
     epochs, figures = {}, {}
     for i in tqdm(range(101, 111), desc="Subjects"):
         s = Subject.load_or_make(i, tavh.RESULTS_DIR)
-        for evnt in tqdm(_EVENTS, desc="\tEvents"):
+        for evnt in tqdm(_EVENTS, desc=f"\tSubject {i+1} Events", disable=True):
             subject_epochs = load_or_calc_epochs(s, evnt, n_samples_before, n_samples_after, enforce_trials)
             epochs[(s.idx, evnt)] = subject_epochs
             subject_figures = load_or_create_figures(s, evnt, subject_epochs)
