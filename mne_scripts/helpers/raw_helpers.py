@@ -22,15 +22,15 @@ def resample(raw: mne.io.Raw, resample_freq: float, inplace: bool = False) -> (m
     return new_raw, new_events
 
 
-def set_montage(raw: mne.io.Raw, montage: Optional[str] = None, overwrite: bool = False) -> mne.io.Raw:
+def set_new_montage(raw: mne.io.Raw, montage: Optional[str] = None, overwrite: bool = False) -> mne.io.Raw:
     """ Set the montage for the data, optionally overwriting the existing montage. """
     new_raw = raw.copy()
     if new_raw.get_montage() is None:
         new_raw.set_montage(montage, on_missing='ignore', verbose=False)
         return new_raw
-    warnings.warn(f"Attempting to set montage '{montage}' on data with existing montage.")
     if not overwrite:
         return new_raw
+    warnings.warn(f"Attempting to set montage '{montage}' on data with existing montage.")
     new_raw.set_montage(montage, on_missing='ignore', verbose=False)
     return new_raw
 

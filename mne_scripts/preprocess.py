@@ -140,7 +140,7 @@ def _step_1(raw: mne.io.Raw, save_to: str, **kwargs) -> mne.io.Raw:
         step1_raw = raw.copy()
         montage = kwargs.get("montage", None)
         if montage is not None:
-            step1_raw = rawh.set_montage(raw, montage=montage, overwrite=True)
+            step1_raw = rawh.set_new_montage(raw, montage=montage, overwrite=True)
         step1_raw = rawh.remap_channels(
             step1_raw,
             eog_channels=kwargs.get("eog_channels", None),
