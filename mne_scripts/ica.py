@@ -83,9 +83,9 @@ def run_ica(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> (mne.io.
     :returns: Tuple of cleaned Raw object and ICA object.
     """
     raw_for_ica, trial_epochs = _prepare_data(raw, trial_events, **kwargs)
-    ica = _fit_ica(raw_for_ica, **kwargs)
-    _visualize_ica(ica, raw, trial_epochs, **kwargs)
-    cleaned_raw = _apply_ica(ica, raw, interpolate_bads=True, verbose=kwargs.get('verbose', False))
+    ica = _fit(raw_for_ica, **kwargs)
+    _visualize(ica, raw, trial_epochs, **kwargs)
+    cleaned_raw = _apply(ica, raw, interpolate_bads=True, verbose=kwargs.get('verbose', False))
     return cleaned_raw, ica
 
 
@@ -175,7 +175,7 @@ def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> (m
     return raw_for_ica, trial_epochs
 
 
-def _fit_ica(raw_for_ica: mne.io.Raw, **kwargs) -> mne.preprocessing.ICA:
+def _fit(raw_for_ica: mne.io.Raw, **kwargs) -> mne.preprocessing.ICA:
     """
     Fit an Independent Component Analysis (ICA) model to the provided raw data. The ICA model is trained on the
     concatenated EEG data from trial and blink epochs, and can be used to identify and remove artifacts from the data.
@@ -217,7 +217,7 @@ def _fit_ica(raw_for_ica: mne.io.Raw, **kwargs) -> mne.preprocessing.ICA:
 # TODO: merge functions _visualize_ica and _apply_ica into a single function
 
 
-def _visualize_ica(
+def _visualize(
         ica: mne.preprocessing.ICA, raw: mne.io.Raw, trial_epochs: Optional[mne.Epochs] = None, **kwargs
 ):
     """
@@ -266,7 +266,7 @@ def _visualize_ica(
     return
 
 
-def _apply_ica(
+def _apply(
         ica: mne.preprocessing.ICA,
         raw: mne.io.Raw,
         interpolate_bads: bool = True,
