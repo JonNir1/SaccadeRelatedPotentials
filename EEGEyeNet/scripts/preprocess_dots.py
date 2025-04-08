@@ -5,12 +5,16 @@ from typing import Tuple, Dict
 import numpy as np
 import pandas as pd
 import mne
+import matplotlib.pyplot as plt
 
 import matplotlib
 matplotlib.use('Qt5Agg')
+mne.viz.set_browser_backend('qt')
 
 from EEGEyeNet.DataModels.DotsSession import DotsSession
+
 from mne_scripts.preprocess import preprocess_raw_fif
+from mne_scripts.ica import run_ica
 
 
 # _BASE_PATH = r'C:\Users\jonathanni\Desktop\EEGEyeNet\dots_data\synchronised_min'  # lab
@@ -75,3 +79,26 @@ preprocessed_raw = preprocess_raw_fif(
     inspect_psd=True, block=True, interpolate_bads=False,
     verbose=True,
 )
+
+trial_onset_codes = {k: v for k, v in events_dict.items() if k.startswith('stim') and not k.endswith('off')}
+cleaned_raw, ica = run_ica(
+    preprocessed_raw,
+    trial_events=trial_onset_codes,
+    min_freq=2, epoch_with_eog=True, trial_reject_criteria=dict(eeg=100e-6, eog=250e-6),
+    et_channel="STI_ET", et_blink_codes={215, 216}, eog_blink_threshold='auto', blink_epoch_repeats=1,
+    num_components=25, random_state=42, max_iter=800, method='infomax', fit_params=dict(extended=True), ica_reject_criteria=dict(eeg=400e-6),
+    plot_single_components=False, plot_psd=False,
+    interpolate_bads=True,
+    verbose=True,
+)
+
+num_components = ica.n_components
+ica.plot_components(picks=range(num_components))
+ica.plot_sources(preprocessed_raw)
+
+for i in range(num_components):
+    fig = ica.plot_properties(
+        preprocessed_raw, picks=i, psd_args=dict(fmax=75), verbose=False, show=False
+    )[0]
+    fig.suptitle(f"Component {i + 1} Properties")
+    plt.show(block=True)
