@@ -101,11 +101,19 @@ def apply_notch_filter(
             UserWarning
         )
         return raw
+    if not suppress_warnings and raw.info["line_freq"] is not None and freq != raw.info["line_freq"]:
+        warnings.warn(
+            f"Notch filter frequency ({freq:1f}Hz) " +
+            f"does not match the Raw object's line frequency ({raw.info['line_freq']:1f}Hz). " +
+            "Overwriting line frequency using the new notch frequency.",
+            UserWarning
+        )
     freqs = np.arange(freq, nyquist, freq).tolist()
     assert len(freqs) > 0   # ensures at least one frequency is under Nyquist
     channel_types = ["eeg", "eog"] if include_eog else ["eeg"]
     new_raw = raw if inplace else raw.copy()
     new_raw.notch_filter(freqs=freqs, picks=channel_types, verbose=False)
+    new_raw.info["line_freq"] = freq
     return new_raw
 
 
