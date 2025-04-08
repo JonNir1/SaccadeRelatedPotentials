@@ -4,6 +4,7 @@ from typing import Optional, Union, Dict, Set, Tuple
 import numpy as np
 import mne
 import matplotlib.pyplot as plt
+import easygui_qt.easygui_qt as gui
 
 import mne_scripts.helpers.annotation_helpers as ah
 import mne_scripts.helpers.event_helpers as eh
@@ -76,16 +77,17 @@ def run_ica(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> (mne.io.
     :keyword fit_params: Additional parameters to pass to the ICA fit method. Default is {'extended': True}.
     :keyword ica_reject_criteria: Dictionary of rejection criteria for ICA fitting. Default is {'eeg': 400e-6}.
 
-    __Visualization Keywords__
+    __Visualize-and-Apply Keywords__
     :keyword plot_single_components: Whether to plot individual component properties. Default is False.
-    :keyword plot_psd: Whether to plot the corrected PSD after applying the ICA. Default is False.
+    :keyword plot_cleaned_ica_psd: Whether to plot the IC's PSD after excluding bad components. Default is False.
+    :keyword interpolate_bads: Whether to interpolate bad channels after applying ICA to the Raw object. Default is True.
+    :keyword plot_cleaned_data: Whether to plot the cleaned data after applying ICA. Default is True.
 
     :returns: Tuple of cleaned Raw object and ICA object.
     """
     raw_for_ica, trial_epochs = _prepare_data(raw, trial_events, **kwargs)
     ica = _fit(raw_for_ica, **kwargs)
-    _visualize(ica, raw, trial_epochs, **kwargs)
-    cleaned_raw = _apply(ica, raw, interpolate_bads=True, verbose=kwargs.get('verbose', False))
+    cleaned_raw = _visualize_and_apply(ica, raw, trial_epochs, **kwargs)
     return cleaned_raw, ica
 
 
@@ -136,7 +138,7 @@ def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> (m
     # high-pass filter the data if necessary
     min_freq = kwargs.get("min_freq", None)
     if min_freq is not None:
-        raw = rh.apply_highpass_filter(raw, min_freq, include_eog=True, inplace=False)
+        raw = rh.apply_highpass_filter(raw, min_freq, include_eog=True, inplace=False, suppress_warnings=True)
 
     # extract trial and blink epochs
     trial_epochs = __extract_trial_epochs(
@@ -214,41 +216,76 @@ def _fit(raw_for_ica: mne.io.Raw, **kwargs) -> mne.preprocessing.ICA:
     return ica
 
 
-# TODO: merge functions _visualize_ica and _apply_ica into a single function
-
-
-def _visualize(
-        ica: mne.preprocessing.ICA, raw: mne.io.Raw, trial_epochs: Optional[mne.Epochs] = None, **kwargs
-):
+def _visualize_and_apply(
+        ica: mne.preprocessing.ICA,
+        raw: mne.io.Raw,
+        trial_epochs: Optional[mne.Epochs] = None,
+        **kwargs,
+) -> mne.io.Raw:
     """
-    Visualize the ICA components as topographic maps and time series.
-    If the `plot_single_components` keyword is True, each component is plotted individually with its PSD and time course.
-    If the `plot_psd` keyword is True, the PSD of the ICA-corrected sources is plotted.
-    Execution is paused after all plots are rendered, and continues when the user presses Enter.
+    Visualize the ICA for manual inspection and annotation of (bad) components to exclude. Then, applies the cleaned ICA
+    model to the raw data and visualizes the cleaned data to verify the results.
+
+    ICA visualization by default shows each component's topographic map and time series separately, in which case the
+    user needs to indicate which components to exclude manually. However, the user can decide to show all topographic
+    maps and time-series simultaneously by setting the `plot_single_components` keyword to False, in which case they
+    specify excluded channels by clicking on the component's topographic map or time-series plot.
+
+    After excluded channels are specified, the user can visualize the corrected PSD of the ICA sources, by setting the
+    `plot_cleaned_ica_psd` keyword to True. Then, the original raw data is corrected by applying the ICA model,
+    and the cleaned data is visualized to verify the results. To prevent visualization of the cleaned data, set the
+    `plot_cleaned_data` keyword to False. Finally, the cleaned data is returned as an MNE Raw object.
 
     :param ica: ICA object containing the fitted ICA model.
     :param raw: Raw object containing the EEG data.
-    :param trial_epochs: Optional Epochs object. If provided, show each ICA component's properties in regard to the
-        trial epochs, and otherwise ICA component properties are plotted with respect to the raw data.
+    :param trial_epochs: Optional Epochs object. If provided, show each IC's properties in regard to the trial epochs,
+        otherwise component properties are plotted with respect to the raw data.
 
     :keyword plot_single_components: Whether to plot individual component properties. Default is True.
-    :keyword plot_psd: Whether to plot the corrected PSD after applying the ICA. Default is False.
-    """
-    num_components = ica.n_components
-    ica.plot_components(picks=range(num_components))
-    ica.plot_sources(raw)
+    :keyword plot_cleaned_ica_psd: Whether to plot the corrected PSD after applying the ICA. Default is False.
+    :keyword interpolate_bads: Whether to interpolate bad channels after applying ICA to the Raw object. Default is True.
+    :keyword plot_cleaned_data: Whether to plot the cleaned data after applying ICA. Default is True.
 
+    :returns: MNE Raw object containing the cleaned data after applying ICA.
+    """
+    start = time.time()
+    verbose = kwargs.get("verbose", False)
+    if verbose:
+        print("Visualizing ICA for manual inspection, and applying it to the raw data...")
+
+    # manually exclude bad components by visualizing single or all components
+    num_components = ica.n_components
+    props_plotter = trial_epochs or raw
     if kwargs.get("plot_single_components", True):
-        props_plotter = trial_epochs or raw
         for i in range(num_components):
             fig = ica.plot_properties(
-                props_plotter, picks=i, psd_args=dict(fmax=_ICA_PSD_FMAX), verbose=False, show=False
+                props_plotter,
+                picks=i,
+                psd_args=dict(fmax=_ICA_PSD_FMAX),
+                verbose=False,
+                show=False,
             )[0]
             fig.suptitle(f"Component {i} Properties")
-            plt.show(block=True)
-            # TODO: use `easygui_qt.easygui_qt.get_continue_or_cancel` to let user decide if the component is bad
+            plt.show(block=False)
+            to_exclude = gui.get_continue_or_cancel(
+                title=f"Exclude component {i}?",
+                message="",
+                continue_button_text="Exclude",
+                cancel_button_text="Keep",
+            )
+            if to_exclude:
+                ica.exclude.append(i)
+    else:
+        ica.plot_components(picks=range(num_components), title="IC Topographic Maps", show=True, verbose=False)
+        ica.plot_sources(props_plotter, title="IC Time-Series", show=True)
+        # excluded_components = gui.get_list_of_choices(
+        #     title="Select components to exclude", choices=[f"Component {i:03d}" for i in range(num_components)]
+        # ) or []
+        # ica.exclude.extend([int(c.split()[1]) for c in excluded_components])
+    if verbose:
+        print(f"\tExcluded components: {ica.exclude}")
 
-    if kwargs.get("plot_psd", False):
+    if kwargs.get("plot_cleaned_ica_psd", False):
         ica_raw = ica.get_sources(raw)
         ica_raw.set_channel_types({name: "eeg" for name in ica_raw.ch_names})
         ica_raw.info["bads"] = []
@@ -263,41 +300,22 @@ def _visualize(
         fig.suptitle("Verify the ICA-Corrected PSD")
         plt.show(block=True)
         # TODO: use `easygui_qt.easygui_qt.get_list_of_choices` to let user indicate which components are bad
-    return
 
-
-def _apply(
-        ica: mne.preprocessing.ICA,
-        raw: mne.io.Raw,
-        interpolate_bads: bool = True,
-        verbose: bool = False,
-) -> mne.io.Raw:
-    """
-    Apply the fitted ICA model to the raw data to remove artifacts, and visualize the cleaned data to verify the results.
-
-    :param ica: Fitted ICA model to apply to the raw data.
-    :param raw: Raw object containing the EEG data.
-    :param interpolate_bads: Whether to interpolate bad channels in the cleaned data. Default is True.
-    :param verbose: Whether to print verbose output. Default is False.
-
-    :return: Raw object containing the cleaned EEG data.
-    """
-    start = time.time()
-    if verbose:
-        print("Applying ICA to raw data...")
-    cleaned_raw = ica.apply(raw.copy())     # copy to avoid modifying the original raw data
-    if interpolate_bads:
+    cleaned_raw = ica.apply(raw.copy(), verbose=False)  # copy to avoid modifying the original raw data
+    if kwargs.get("interpolate_bads", True):
         cleaned_raw.interpolate_bads(verbose=False)
-    cleaned_raw.plot(
-        n_channels=20,
-        title="ICA Cleaned Data :: Check for Remaining Artifacts!",
-        scalings=dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2),
-    )
+    if kwargs.get("plot_cleaned_data", True):
+        cleaned_raw.plot(
+            n_channels=20,
+            title="Processed Data (ICA-Corrected) :: Check for Remaining Artifacts!",
+            # scalings=dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2),    # TODO: add scalings as kwarg
+            show=False,
+        )
+        plt.show(block=True)
     if verbose:
         elapsed = time.time() - start
         print(f"\tCompleted in {elapsed:.2f}s")
     return cleaned_raw
-
 
 
 def __extract_trial_epochs(
