@@ -7,7 +7,7 @@ import mne
 
 import mne_scripts.helpers.event_helpers as evh
 
-_MIN_FREQ_WARN_THRESHOLD, _MAX_FREQ_WARN_THRESHOLD_WITH_EOG, _MAX_FREQ_WARN_THRESHOLD_NO_EOG = 0.5, 100, 30
+_MIN_FREQ_WARN_THRESHOLD, _MAX_FREQ_WARN_THRESHOLD_WITH_EOG, _MAX_FREQ_WARN_THRESHOLD_NO_EOG = 1, 100, 30
 
 
 def resample(raw: mne.io.Raw, resample_freq: float, inplace: bool = False) -> (mne.io.Raw, np.ndarray):
