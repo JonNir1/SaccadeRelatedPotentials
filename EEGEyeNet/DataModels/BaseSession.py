@@ -1,3 +1,4 @@
+import os
 import copy
 from abc import ABC, abstractmethod
 from typing import final, Optional, Dict, Union
@@ -294,6 +295,8 @@ class BaseSession(ABC):
 
     @staticmethod
     def _parse_mat_file(path: str):
+        if not os.path.exists(path):
+            raise FileNotFoundError(f"File not found: {path}")
         mat = read_mat(path)['sEEG']
         # load metadata from mat file
         num_channels = mat['nbchan']
