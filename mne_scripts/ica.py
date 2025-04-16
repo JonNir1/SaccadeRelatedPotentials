@@ -135,11 +135,6 @@ def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> (m
     if verbose:
         print("Preparing data for ICA...")
 
-    # high-pass filter the data if necessary
-    min_freq = kwargs.get("min_freq", None)
-    if min_freq is not None:
-        raw = rh.apply_highpass_filter(raw, min_freq, include_eog=True, inplace=False, suppress_warnings=True)
-
     # extract trial and blink epochs
     trial_epochs = __extract_trial_epochs(
         raw, trial_events,
@@ -171,6 +166,12 @@ def _prepare_data(raw: mne.io.Raw, trial_events: Dict[str, int], **kwargs) -> (m
     raw_for_ica = mne.concatenate_raws([trial_raw, blink_raw], verbose=False)
     del trial_raw, blink_raw, blink_epochs
 
+    # high-pass filter the data if necessary
+    min_freq = kwargs.get("min_freq", None)
+    if min_freq is not None:
+        raw_for_ica = rh.apply_highpass_filter(
+            raw_for_ica, min_freq, include_eog=True, inplace=False, suppress_warnings=True
+        )
     if verbose:
         elapsed = time.time() - start
         print(f"\tCompleted in {elapsed:.2f}s")
