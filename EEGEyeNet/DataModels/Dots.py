@@ -1,8 +1,9 @@
 import os
 import warnings
-from typing import Dict, Tuple
+from typing import Dict, Tuple, List
 from enum import IntEnum
 from numbers import Number
+import pickle as pkl
 
 import numpy as np
 import pandas as pd
@@ -343,3 +344,85 @@ class DotsBlock(BaseRecording):
 
     def __repr__(self):
         return f"{super().__repr__()}_{self.block_num}"
+
+
+class DotsSession:
+    __EXPECTED_BLOCK_COUNT = len([k for k, v in _EVENTS_DICT.items() if k.startswith(_GRID_PREFIX_STR)])
+
+    def __init__(self, blocks: List[DotsBlock]):
+        types = {type(block) for block in blocks}
+        if len(types) != 1 or DotsBlock not in types:
+            raise TypeError("All blocks must be of type DotsBlock")
+        subjects = {block.subject for block in blocks}
+        if len(subjects) != 1:
+            raise ValueError("All DotBlock objects must belong to the same subject")
+        blocks = sorted(blocks, key=lambda b: b.block_num, reverse=False)
+        self._blocks = blocks
+        self._subject = blocks[0].subject
+
+    @property
+    def subject(self) -> str:
+        return self._subject
+
+    @property
+    def num_blocks(self) -> int:
+        return len(self._blocks)
+
+    @property
+    def missing_blocks(self) -> List[int]:
+        """ Get the list of missing blocks in the session, or empty list if all blocks are present. """
+        all_block_nums = set(range(1, self.__EXPECTED_BLOCK_COUNT + 1))
+        present_block_nums = {block.block_num for block in self._blocks}
+        return sorted(list(all_block_nums - present_block_nums))
+
+    def get_block(self, block_num: int) -> DotsBlock:
+        """
+        Get the block with the specified block number.
+        :param block_num: the block number
+        :return: the DotsBlock object
+        """
+        for block in self._blocks:
+            if block.block_num == block_num:
+                return block
+        raise KeyError(f"Block {block_num} not found in Session.")
+
+    def to_mne(self) -> (mne.io.RawArray, Dict[str, int]):
+        # TODO: implement this method
+        raise NotImplementedError("DotsSession.to_mne() is not implemented. Use DotsBlock.to_mne() instead.")
+
+    def to_pickle(self, path: str):
+        """
+        Save the DotsSession object to a pickle file.
+        :param path: the path to save the pickle file
+        """
+        with open(path, 'wb') as f:
+            pkl.dump(self, f)
+
+    @staticmethod
+    def from_pickle(path: str) -> "DotsSession":
+        """
+        Load the DotsSession object from a pickle file.
+        :param path: the path to the pickle file
+        :return: the DotsSession object
+        """
+        with open(path, 'rb') as f:
+            return pkl.load(f)
+
+    def __eq__(self, other):
+        if not isinstance(other, DotsSession):
+            return False
+        if self.subject != other.subject:
+            return False
+        if self.num_blocks != other.num_blocks:
+            return False
+        return True
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __repr__(self):
+        return f"{self.__class__.__name__}_{self._subject.upper()}"
+
+    def __str__(self):
+        return self.__repr__()
+
