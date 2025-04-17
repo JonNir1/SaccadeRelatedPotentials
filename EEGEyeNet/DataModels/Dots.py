@@ -373,17 +373,21 @@ class DotsSession:
         self._subject = blocks[0].subject
 
     @staticmethod
-    def from_mat_files(path: str) -> "DotsSession":
+    def from_mat_files(path: str, verbose: bool = False) -> "DotsSession":
         """
         Load a DotsSession object from a directory containing .mat files.
         :param path: the path to the directory containing the .mat files
+        :param verbose: whether to print progress messages
         :return: the DotsSession object
         """
         if not os.path.exists(path) or not os.path.isdir(path):
             raise NotADirectoryError(path, "Directory does not exist")
         subj_id = os.path.basename(path)    # path format: C:/path/to/data/SUBJECT-ID/
         blocks = []
-        for i in trange(start=1, stop=DotsSession.__EXPECTED_BLOCK_COUNT + 1, desc="Dots Block", unit=" blocks"):
+        for i in trange(
+                1, DotsSession.__EXPECTED_BLOCK_COUNT + 1,
+                desc="DotsBlock Objects", unit=" blocks", disable=not verbose
+        ):
             mat_path = os.path.join(path, DotsSession.__MAT_FILE_FORMAT % (subj_id, i))
             try:
                 block = DotsBlock.from_mat_file(mat_path)
@@ -420,8 +424,18 @@ class DotsSession:
         raise KeyError(f"Block {block_num} not found in Session.")
 
     def to_mne(self) -> (mne.io.RawArray, Dict[str, int]):
-        # TODO: implement this method
-        raise NotImplementedError("DotsSession.to_mne() is not implemented. Use DotsBlock.to_mne() instead.")
+        """
+        Convert the DotsSession object to an MNE RawArray object and a dictionary of mapping event names to event codes.
+        :return: a tuple of the MNE RawArray object and the event dictionary
+        """
+        raws = []
+        event_dict = dict()
+        for block in self._blocks:
+            raw, ed = block.to_mne()
+            raws.append(raw)
+            event_dict.update(ed)
+        concat = mne.concatenate_raws(raws, verbose=False)
+        return concat, event_dict
 
     def to_pickle(self, path: str):
         """
