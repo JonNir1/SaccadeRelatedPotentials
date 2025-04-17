@@ -8,6 +8,7 @@ import pickle as pkl
 import numpy as np
 import pandas as pd
 import mne
+from tqdm import trange
 
 from EEGEyeNet.DataModels.BaseRecording import BaseRecording, TaskType
 
@@ -358,6 +359,7 @@ class DotsSession:
     blocks represented as `DotsBlock` objects.
     """
     __EXPECTED_BLOCK_COUNT = len([k for k, v in _EVENTS_DICT.items() if k.startswith(_BLOCK_PREFIX_STR)])
+    __MAT_FILE_FORMAT = "%s_DOTS%d_EEG.mat"
 
     def __init__(self, blocks: List[DotsBlock]):
         types = {type(block) for block in blocks}
@@ -369,6 +371,27 @@ class DotsSession:
         blocks = sorted(blocks, key=lambda b: b.block_num, reverse=False)
         self._blocks = blocks
         self._subject = blocks[0].subject
+
+    @staticmethod
+    def from_mat_files(path: str) -> "DotsSession":
+        """
+        Load a DotsSession object from a directory containing .mat files.
+        :param path: the path to the directory containing the .mat files
+        :return: the DotsSession object
+        """
+        if not os.path.exists(path) or not os.path.isdir(path):
+            raise NotADirectoryError(path, "Directory does not exist")
+        subj_id = os.path.basename(path)    # path format: C:/path/to/data/SUBJECT-ID/
+        blocks = []
+        for i in trange(start=1, stop=DotsSession.__EXPECTED_BLOCK_COUNT + 1, desc="Dots Block", unit=" blocks"):
+            mat_path = os.path.join(path, DotsSession.__MAT_FILE_FORMAT % (subj_id, i))
+            try:
+                block = DotsBlock.from_mat_file(mat_path)
+                blocks.append(block)
+            except FileNotFoundError:
+                print(f"\nFile not found: {mat_path}")
+                continue
+        return DotsSession(blocks)
 
     @property
     def subject(self) -> str:
@@ -437,4 +460,3 @@ class DotsSession:
 
     def __str__(self):
         return self.__repr__()
-
