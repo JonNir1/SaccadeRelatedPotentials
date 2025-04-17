@@ -122,7 +122,7 @@ class DotsBlock(BaseRecording):
         # create MNE Info object
         chan_locs = self.get_channel_locations()
         info = mne.create_info(
-            ch_names=chan_locs['labels'].tolist() + ['STI_ET', 'STI_SES', 'STI_DOT'],
+            ch_names=chan_locs['labels'].tolist() + ['STI_ET', 'STI_BLOCK', 'STI_DOT'],
             ch_types=chan_locs['type'].tolist() + ['stim', 'stim', 'stim'],
             sfreq=self.sampling_rate,
         )
