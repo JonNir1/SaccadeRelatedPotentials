@@ -367,7 +367,7 @@ class DotsSession:
             raise TypeError("All blocks must be of type DotsBlock")
         subjects = {block.subject for block in blocks}
         if len(subjects) != 1:
-            raise ValueError("All DotBlock objects must belong to the same subject")
+            raise ValueError("All DotsBlock objects must belong to the same subject")
         blocks = sorted(blocks, key=lambda b: b.block_num, reverse=False)
         self._blocks = blocks
         self._subject = blocks[0].subject
