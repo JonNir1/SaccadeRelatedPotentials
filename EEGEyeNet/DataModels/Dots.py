@@ -11,18 +11,18 @@ import mne
 
 from EEGEyeNet.DataModels.BaseRecording import BaseRecording, TaskType
 
-_GRID_PREFIX_STR: str = "grid_"
+_BLOCK_PREFIX_STR: str = "block_"
 _EVENTS_DICT = {
     "stim_off": 41,
-    "block_on": 55,
-    "block_off": 56,
+    "grid_on": 55,
+    "grid_off": 56,
 
-    f"{_GRID_PREFIX_STR}1": 201,
-    f"{_GRID_PREFIX_STR}2": 202,
-    f"{_GRID_PREFIX_STR}3": 203,
-    f"{_GRID_PREFIX_STR}4": 204,
-    f"{_GRID_PREFIX_STR}5": 205,
-    f"{_GRID_PREFIX_STR}6": 206,
+    f"{_BLOCK_PREFIX_STR}1": 201,
+    f"{_BLOCK_PREFIX_STR}2": 202,
+    f"{_BLOCK_PREFIX_STR}3": 203,
+    f"{_BLOCK_PREFIX_STR}4": 204,
+    f"{_BLOCK_PREFIX_STR}5": 205,
+    f"{_BLOCK_PREFIX_STR}6": 206,
 
     "L_fixation": 211,
     "R_fixation": 212,
@@ -44,8 +44,8 @@ _DOT_LOCATIONS: Dict[int, Tuple[int, int]] = {
 }
 
 
-class DotsBlockTaskType(IntEnum):
-    OUT_OF_BLOCK = 0
+class DotsGridType(IntEnum):
+    OUT_OF_GRID = 0
     BASIC = 1
     REVERSED = 2
     MIRRORED = 3
@@ -54,6 +54,12 @@ class DotsBlockTaskType(IntEnum):
 
 
 class DotsBlock(BaseRecording):
+    """
+    Class representing a block of the EEGEyeNet `Dots` task. A block is a single recording of a single subject's data,
+    where the subject performed EEGEyeNet's `Dots` (aka `Large Grid`) task. Each block consists of five "grids" of dots,
+    where each grid is a collection of dots that are presented to the subject in a specific order, based on the
+    `DotsGridType` enum.
+    """
     _TASK_TYPE = TaskType.DOTS
 
     def __init__(
@@ -100,7 +106,7 @@ class DotsBlock(BaseRecording):
             if k2 in ["fixation", "saccade", "blink"]:
                 event_dict[f"{k2}/{k1}"] = np.uint8(v)  # key changes from "L_Fixation" to "fixation/l"
             else:
-                event_dict[f"{k1}/{k2}"] = np.uint8(v)  # key changes from "block_on" to "block/on"
+                event_dict[f"{k1}/{k2}"] = np.uint8(v)  # key changes from "grid_on" to "grid/on"
         event_dict.update({
             f"stim/{val}": val for val in np.unique(dot_triggers)
             if val not in {0, _EVENTS_DICT['stim_off']}
@@ -108,7 +114,7 @@ class DotsBlock(BaseRecording):
         if not all(np.isin(np.unique(et_triggers[et_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in ET triggers")
         if not all(np.isin(np.unique(ses_triggers[ses_triggers != 0]), list(event_dict.values()))):
-            raise AssertionError("Unexpected event code in block triggers")
+            raise AssertionError("Unexpected event code in grid triggers")
         if not all(np.isin(np.unique(dot_triggers[dot_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in stim triggers")
 
@@ -170,23 +176,23 @@ class DotsBlock(BaseRecording):
         return base_x, base_y
 
     @staticmethod
-    def _post_process_events(events: pd.DataFrame, ses_num: int) -> pd.DataFrame:
+    def _post_process_events(events: pd.DataFrame, block_num: int) -> pd.DataFrame:
         # parse event types
         events['orig_type'] = events['type']
         events['type'] = DotsBlock.__parse_event_types(events['type'])
 
-        # extract block type: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
-        events['block'] = DotsBlock.__extract_block_type_event(events['type'])
+        # extract grid type: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
+        events['grid'] = DotsBlock.__extract_grid_type_event(events['type'])
 
         # append dots metadata (coordinates, etc.)
         events = DotsBlock.__append_dots_metadata(events)
 
-        # assert that grid number in events matches block number from metadata
-        _grid_num = int((events['type'][events['type'].map(
-            lambda val: str(val).startswith(_GRID_PREFIX_STR)
+        # assert that block number in events matches block number from metadata
+        _block_num = int((events['type'][events['type'].map(
+            lambda val: str(val).startswith(_BLOCK_PREFIX_STR)
         )].iloc[0])[-1])
-        if _grid_num != ses_num:
-            raise AssertionError(f"Grid number in events ({_grid_num}) must match metadata ({ses_num})")
+        if _block_num != block_num:
+            raise AssertionError(f"Grid number in events ({_block_num}) must match metadata ({block_num})")
         return events
 
     @staticmethod
@@ -196,33 +202,33 @@ class DotsBlock(BaseRecording):
         event_type = event_type.map(
             lambda val: val - 100 if isinstance(val, int) and 100 <= val < 200 else val  # convert 101-127 to 1-27
         )
-        event_type = event_type.replace({41: "stim_off", 55: "block_on", 56: "block_off"})
+        event_type = event_type.replace({41: "stim_off", 55: "grid_on", 56: "grid_off"})
 
-        # find grid number: the first event labelled 12-17 before the first block_on event
-        block_on_idxs = event_type[event_type == "block_on"].index
-        events_preceding_blocks = event_type.iloc[:block_on_idxs.min()]
-        is_gridnum_event = np.isin(events_preceding_blocks, np.arange(12, 18))
-        if is_gridnum_event.sum() == 0:
-            raise ValueError("No grid number event found before first `block_on` event")
-        if is_gridnum_event.sum() > 1:
-            raise ValueError("Multiple grid number events found before first `block_on` event")
-        gridnum_idx = events_preceding_blocks[is_gridnum_event].index.min()
-        grid_number = int(event_type[gridnum_idx]) - 11  # grids 1-6 are labelled 12-17
-        event_type[gridnum_idx] = f"{_GRID_PREFIX_STR}{grid_number}"
+        # find grid number: the first event labelled 12-17 before the first grid_on event
+        grid_on_idxs = event_type[event_type == "grid_on"].index
+        events_preceding_grid = event_type.iloc[:grid_on_idxs.min()]
+        is_block_num_event = np.isin(events_preceding_grid, np.arange(12, 18))
+        if is_block_num_event.sum() == 0:
+            raise ValueError("No block number event found before first `grid_on` event")
+        if is_block_num_event.sum() > 1:
+            raise ValueError("Multiple block number events found before first `grid_on` event")
+        block_num_idx = events_preceding_grid[is_block_num_event].index.min()
+        block_number = int(event_type[block_num_idx]) - 11  # blocks 1-6 are labelled 12-17
+        event_type[block_num_idx] = f"{_BLOCK_PREFIX_STR}{block_number}"
         return event_type
 
     @staticmethod
-    def __extract_block_type_event(event_type: pd.Series) -> pd.Series:
-        block_on_idxs = event_type[(event_type == "block_on") | (event_type == 55)].index
-        block_off_idxs = event_type[(event_type == "block_off") | (event_type == 56)].index
-        if len(block_on_idxs) != len(block_off_idxs):
-            raise ValueError("Number of block_on and block_off events must match")
-        if len(block_on_idxs) != 5:
-            raise ValueError(f"Number of blocks must be 5, found {len(block_on_idxs)}")
-        block_type = pd.Series(DotsBlockTaskType.OUT_OF_BLOCK, index=event_type.index)
-        for i, (on, off) in enumerate(zip(block_on_idxs, block_off_idxs)):
-            block_type.loc[on:off] = DotsBlockTaskType(i + 1)
-        return block_type
+    def __extract_grid_type_event(event_type: pd.Series) -> pd.Series:
+        grid_on_idxs = event_type[(event_type == "grid_on") | (event_type == 55)].index
+        grid_off_idxs = event_type[(event_type == "grid_off") | (event_type == 56)].index
+        if len(grid_on_idxs) != len(grid_off_idxs):
+            raise ValueError("Number of `grid_on` and `grid_off` events must match")
+        if len(grid_on_idxs) != 5:
+            raise ValueError(f"Number of grids must be 5, found {len(grid_on_idxs)}")
+        grid_type = pd.Series(DotsGridType.OUT_OF_GRID, index=event_type.index)
+        for i, (on, off) in enumerate(zip(grid_on_idxs, grid_off_idxs)):
+            grid_type.loc[on:off] = DotsGridType(i + 1)
+        return grid_type
 
     @staticmethod
     def __append_dots_metadata(events: pd.DataFrame) -> pd.DataFrame:
@@ -266,8 +272,8 @@ class DotsBlock(BaseRecording):
         events.loc[events['center_distance_px'] == 0, 'center_angle_deg'] = 0  # correct angle for zero distance
 
         # relative to previous dot (1st dot in each block should get `NaN`)
-        for b in events['block'].unique():
-            is_block = events['block'] == b
+        for g in events['grid'].unique():
+            is_block = events['grid'] == g
             is_dot_in_block = is_dot_event & is_block
             dx = events.loc[is_dot_in_block, 'stim_x'].diff()
             dy = events.loc[is_dot_in_block, 'stim_y'].diff()
@@ -347,7 +353,7 @@ class DotsBlock(BaseRecording):
 
 
 class DotsSession:
-    __EXPECTED_BLOCK_COUNT = len([k for k, v in _EVENTS_DICT.items() if k.startswith(_GRID_PREFIX_STR)])
+    __EXPECTED_BLOCK_COUNT = len([k for k, v in _EVENTS_DICT.items() if k.startswith(_BLOCK_PREFIX_STR)])
 
     def __init__(self, blocks: List[DotsBlock]):
         types = {type(block) for block in blocks}
