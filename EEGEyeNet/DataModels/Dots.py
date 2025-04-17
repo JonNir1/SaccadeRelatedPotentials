@@ -425,6 +425,8 @@ class DotsSession:
             return False
         if self.num_blocks != other.num_blocks:
             return False
+        if self.missing_blocks != other.missing_blocks:
+            return False
         return True
 
     def __ne__(self, other):
