@@ -84,3 +84,7 @@ for i in range(num_components):
     # plt.close('all')
     if i == 1:
         break
+
+
+# TODO: use the GUI to select components to exclude
+# TODO: save ICA object, save pre-cleaning and post-cleaning raw, save events_dict
