@@ -353,6 +353,10 @@ class DotsBlock(BaseRecording):
 
 
 class DotsSession:
+    """
+    Class representing a session of the EEGEyeNet `Dots` task. A session is one subject's data, cosisting of multiple
+    blocks represented as `DotsBlock` objects.
+    """
     __EXPECTED_BLOCK_COUNT = len([k for k, v in _EVENTS_DICT.items() if k.startswith(_BLOCK_PREFIX_STR)])
 
     def __init__(self, blocks: List[DotsBlock]):
