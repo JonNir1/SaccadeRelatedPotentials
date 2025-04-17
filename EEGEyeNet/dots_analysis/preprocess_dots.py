@@ -9,7 +9,7 @@ import matplotlib
 import matplotlib.pyplot as plt
 import easygui_qt.easygui_qt as gui
 
-from EEGEyeNet.DataModels.DotsSession import DotsSession
+from EEGEyeNet.DataModels.Dots import DotsBlock
 
 from mne_scripts.preprocess import preprocess_raw_fif
 from mne_scripts.ica import run_ica
@@ -37,7 +37,7 @@ VISUALIZATION_SCALING = dict(eeg=1e-4, eog=1e-4, eyegaze=5e2, pupil=5e2)
 
 preprocessed_raw = preprocess_raw_fif(
     os.path.join(_BASE_PATH, _SUBJ_ID, "concatenated_raw.fif"),
-    eog_channels=DotsSession.para_ocular_electrodes(),
+    eog_channels=DotsBlock.para_ocular_electrodes(),
     min_freq=0.1, max_freq=100, notch_freq=50,
     ref_channel="average", re_reference_eog=True,
     merge_within_ms=20,

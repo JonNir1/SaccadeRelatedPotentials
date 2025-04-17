@@ -4,7 +4,7 @@ from typing import Tuple, Dict
 
 import mne
 from tqdm import tqdm
-from EEGEyeNet.DataModels.DotsSession import DotsSession
+from EEGEyeNet.DataModels.Dots import DotsBlock
 
 _MAT_FILE_FORMAT = "%s_DOTS%d_EEG.mat"
 
@@ -31,7 +31,7 @@ def concatenate_single_subject(subj_dir: str) -> Tuple[mne.io.Raw, Dict[str, int
         for i in range(1, 7):
             mat_path = os.path.join(subj_dir, _MAT_FILE_FORMAT % (subject_id, i))
             try:
-                raw, event_dict = DotsSession.from_mat_file(mat_path).to_mne()
+                raw, event_dict = DotsBlock.from_mat_file(mat_path).to_mne()
                 raws.append(raw)
                 del raw, mat_path
             except FileNotFoundError:

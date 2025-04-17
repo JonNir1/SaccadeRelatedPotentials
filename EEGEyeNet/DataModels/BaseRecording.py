@@ -11,7 +11,7 @@ from mne.io import Raw
 from mne_scripts.helpers.utils import *
 
 
-class SessionTaskType(StrEnum):
+class TaskType(StrEnum):
     ANTI_SACCADE = "anti_saccade"
     DOTS = "dots"
     VISUAL_SEARCH = "visual_search"
@@ -24,7 +24,7 @@ class EyeMovementType(IntEnum):
     BLINK = 5
 
 
-class BaseSession(ABC):
+class BaseRecording(ABC):
     _EVENT_COLUMNS = [
         'type', 'latency', 'duration', 'endtime',
         'sac_amplitude', 'sac_endpos_x', 'sac_endpos_y',
@@ -36,7 +36,7 @@ class BaseSession(ABC):
         'sph_theta', 'sph_phi', 'sph_radius', 'theta', 'radius',
     ]
 
-    _TASK_TYPE: SessionTaskType
+    _TASK_TYPE: TaskType
 
     def __init__(
             self,
@@ -63,20 +63,20 @@ class BaseSession(ABC):
 
     @staticmethod
     @abstractmethod
-    def from_mat_file(path: str) -> "BaseSession":
-        # TODO: make this a Factory Method once other session classes are implemented
+    def from_mat_file(path: str) -> "BaseRecording":
+        # TODO: make this a Factory Method once other classes are implemented
         raise NotImplementedError
 
     @abstractmethod
     def to_mne(self) -> (Raw, Dict[int, Union[int, str]]):
         """
-        Convert the session data to an MNE Raw object, and return it along with a dictionary mapping event trigger
+        Convert the recording data to an MNE Raw object, and return it along with a dictionary mapping event trigger
         values to event names.
         :return:
             raw: MNE Raw object
             event_dict: Dictionary mapping event trigger values to event names
         """
-        # TODO: when additional session classes are implemented, this method should contain common logic with an _impl
+        # TODO: when additional classes are implemented, this method should contain common logic with an _impl
         #  method that is overridden by the subclasses
         raise NotImplementedError
 
@@ -115,7 +115,7 @@ class BaseSession(ABC):
 
     @final
     @property
-    def task_type(self) -> SessionTaskType:
+    def task_type(self) -> TaskType:
         return self.__class__._TASK_TYPE
 
     @classmethod
@@ -162,7 +162,7 @@ class BaseSession(ABC):
         specified by their label, while other channels can be specified by their electrode number/name (for example,
         electrode 62 can be specified as `62`, `E62`, or `Pz`).
         :param channel: The channel label or electrode number.
-        :return: The data for the specified channel, with shape (N,) where N is the number of samples in the session.
+        :return: The data for the specified channel, with shape (N,) where N is the number of samples in the recording.
         """
         central_channels = {'Fz': 'E11', 'Cz': 'Cz', 'Pz': 'E62', 'Oz': 'E75'}
         channel = central_channels.get(channel.capitalize(), channel)
@@ -259,7 +259,7 @@ class BaseSession(ABC):
         NOTE: Jia & Tyler, 2019 (https://doi.org/10.3758/s13428-019-01280-8) extract EOG data using channels E25, E127,
         E8, E126, E32, E1, and E17 (EGI-128 system). We add channels E125 and E128 to this list.
 
-        :return np.ndarray: The radial EOG signal, shape (N,) where N is the number of samples in the session.
+        :return np.ndarray: The radial EOG signal, shape (N,) where N is the number of samples in the recording.
         :raises ValueError: If the reference electrode is not one of 'Cz', 'Pz' (E62), or 'Oz' (E75).
         """
         para_ocular_electrodes = self.para_ocular_electrodes()
@@ -324,13 +324,13 @@ class BaseSession(ABC):
             raise AssertionError(f"Number of samples in data ({data.shape[1]}) must match metadata ({num_samples})")
 
         # load channel locations into DataFrame and verify inputs
-        channel_locs = BaseSession.__parse_raw_channel_locations(mat['chanlocs'])
+        channel_locs = BaseRecording.__parse_raw_channel_locations(mat['chanlocs'])
         if len(channel_locs.index) != num_channels:
             raise AssertionError(
                 f"Number of channel locations ({len(channel_locs.index)}) must match metadata ({num_channels})")
 
         # load events into DataFrame
-        events = BaseSession.__parse_raw_events(mat['event'])
+        events = BaseRecording.__parse_raw_events(mat['event'])
 
         # clean gaze data - if X, Y, and Pupil are all 0, replace with NaN
         is_gaze_channel = np.isin(channel_locs['labels'], ['L-GAZE-X', 'L-GAZE-Y', 'R-GAZE-X', 'R-GAZE-Y'])
@@ -348,7 +348,7 @@ class BaseSession(ABC):
         provided in the "data structure" appendix to EEGEyeNet's documentation: https://osf.io/ktv7m/
         """
         channel_locs_df = pd.DataFrame(channel_locs)
-        missing_columns = set(BaseSession._CHANNEL_LOCATION_COLUMNS) - set(channel_locs_df.columns)
+        missing_columns = set(BaseRecording._CHANNEL_LOCATION_COLUMNS) - set(channel_locs_df.columns)
         if missing_columns:
             raise ValueError(f"Missing columns in channel locations DataFrame: {missing_columns}")
         channel_locs_df['labels'] = channel_locs_df['labels'].map(lambda val: val.strip())
@@ -373,7 +373,7 @@ class BaseSession(ABC):
     @final
     def __parse_raw_events(events: Dict[str, list]) -> pd.DataFrame:
         events_df = pd.DataFrame(events)
-        missing_columns = set(BaseSession._EVENT_COLUMNS) - set(events_df.columns)
+        missing_columns = set(BaseRecording._EVENT_COLUMNS) - set(events_df.columns)
         if missing_columns:
             raise ValueError(f"Missing columns in events DataFrame: {missing_columns}")
 
@@ -397,7 +397,7 @@ class BaseSession(ABC):
         return events_df
 
     def __eq__(self, other):
-        if not isinstance(other, BaseSession):
+        if not isinstance(other, BaseRecording):
             return False
         if self.subject != other.subject:
             return False

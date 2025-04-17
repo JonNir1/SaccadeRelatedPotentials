@@ -8,7 +8,39 @@ import numpy as np
 import pandas as pd
 import mne
 
-from EEGEyeNet.DataModels.BaseSession import BaseSession, SessionTaskType
+from EEGEyeNet.DataModels.BaseRecording import BaseRecording, TaskType
+
+_GRID_PREFIX_STR: str = "grid_"
+_EVENTS_DICT = {
+    "stim_off": 41,
+    "block_on": 55,
+    "block_off": 56,
+
+    f"{_GRID_PREFIX_STR}1": 201,
+    f"{_GRID_PREFIX_STR}2": 202,
+    f"{_GRID_PREFIX_STR}3": 203,
+    f"{_GRID_PREFIX_STR}4": 204,
+    f"{_GRID_PREFIX_STR}5": 205,
+    f"{_GRID_PREFIX_STR}6": 206,
+
+    "L_fixation": 211,
+    "R_fixation": 212,
+    "L_saccade": 213,
+    "R_saccade": 214,
+    "L_blink": 215,
+    "R_blink": 216,
+}
+_DOT_LOCATIONS: Dict[int, Tuple[int, int]] = {
+    # dot locations specified in EEGEyeNet's OSF appendix on experimental paradigms (https://osf.io/ktv7m/)
+    # IMPORTANT NOTE: the (x,y) coordinates follow Matlab convention, so bottom-left is (0,0) and top-right is (800,600)
+    1: (400, 300),  # middle
+    2: (650, 500), 3: (400, 100), 4: (100, 450), 5: (700, 450), 6: (100, 500), 7: (200, 350), 8: (300, 400),
+    9: (100, 150), 10: (150, 500), 11: (150, 100), 12: (700, 100), 13: (300, 200), 14: (100, 100), 15: (700, 500),
+    16: (500, 400), 17: (600, 250), 18: (650, 100),
+    19: (400, 300),  # middle
+    20: (200, 250), 21: (400, 500), 22: (700, 150), 23: (500, 200), 24: (100, 300), 25: (700, 300), 26: (600, 350),
+    27: (400, 300),  # middle
+}
 
 
 class DotsBlockTaskType(IntEnum):
@@ -20,40 +52,8 @@ class DotsBlockTaskType(IntEnum):
     BASIC2 = 5
 
 
-
-class DotsSession(BaseSession):
-    _TASK_TYPE = SessionTaskType.DOTS
-    __GRID_PREFIX_STR: str = "grid_"
-    __EVENTS_DICT = {
-        "stim_off": 41,
-        "block_on": 55,
-        "block_off": 56,
-
-        f"{__GRID_PREFIX_STR}1": 201,
-        f"{__GRID_PREFIX_STR}2": 202,
-        f"{__GRID_PREFIX_STR}3": 203,
-        f"{__GRID_PREFIX_STR}4": 204,
-        f"{__GRID_PREFIX_STR}5": 205,
-        f"{__GRID_PREFIX_STR}6": 206,
-
-        "L_fixation": 211,
-        "R_fixation": 212,
-        "L_saccade": 213,
-        "R_saccade": 214,
-        "L_blink": 215,
-        "R_blink": 216,
-    }
-    __DOT_LOCATIONS: Dict[int, Tuple[int, int]] = {
-        # dot locations specified in EEGEyeNet's OSF appendix on experimental paradigms (https://osf.io/ktv7m/)
-        # IMPORTANT NOTE: the (x,y) coordinates follow Matlab convention, so bottom-left is (0,0) and top-right is (800,600)
-        1: (400, 300),  # middle
-        2: (650, 500), 3: (400, 100), 4: (100, 450), 5: (700, 450), 6: (100, 500), 7: (200, 350), 8: (300, 400),
-        9: (100, 150), 10: (150, 500), 11: (150, 100), 12: (700, 100), 13: (300, 200), 14: (100, 100), 15: (700, 500),
-        16: (500, 400), 17: (600, 250), 18: (650, 100),
-        19: (400, 300),  # middle
-        20: (200, 250), 21: (400, 500), 22: (700, 150), 23: (500, 200), 24: (100, 300), 25: (700, 300), 26: (600, 350),
-        27: (400, 300),  # middle
-    }
+class DotsBlock(BaseRecording):
+    _TASK_TYPE = TaskType.DOTS
 
     def __init__(
             self,
@@ -62,51 +62,52 @@ class DotsSession(BaseSession):
             timestamps: np.ndarray,
             events: pd.DataFrame,
             channel_locations: pd.DataFrame,
-            session_num: int,
+            block_num: int,
             reference: str = "average"
     ):
         super().__init__(subject, data, timestamps, events, channel_locations, reference)
-        self._session_num = session_num
+        self._block_num = block_num
 
     @staticmethod
-    def from_mat_file(path: str) -> "DotsSession":
-        data, timestamps, events, channel_locs, ref = DotsSession._parse_mat_file(path)
+    def from_mat_file(path: str) -> "DotsBlock":
+        data, timestamps, events, channel_locs, ref = DotsBlock._parse_mat_file(path)
 
         # extract metadata from path
         basename = os.path.basename(path)  # example: EP12_DOTS5_EEG.mat
         subject_id = basename.split("_")[0].capitalize()
-        session_num = int(basename.split("_")[1][-1])
+        block_num = int(basename.split("_")[1][-1])
 
         # post-process the `events` DataFrame
-        events = DotsSession._post_process_events(events, session_num)
+        events = DotsBlock._post_process_events(events, block_num)
 
-        # return DotsSession object
-        ses = DotsSession(subject_id, data, timestamps, events, channel_locs, session_num, ref)
+        # return DotsBlock object
+        ses = DotsBlock(subject_id, data, timestamps, events, channel_locs, block_num, ref)
         return ses
 
     @property
-    def session_num(self) -> int:
-        return self._session_num
+    def block_num(self) -> int:
+        return self._block_num
 
     def to_mne(self, verbose: bool = False) -> (mne.io.RawArray, Dict[str, int]):
         # create mapping from event-name to event-code
-        et_triggers, ses_triggers, dot_triggers = DotsSession.__events_df_to_mne_channels(
+        et_triggers, ses_triggers, dot_triggers = DotsBlock.__events_df_to_mne_channels(
             self._events, self.num_samples
         )
         event_dict = dict()
-        for k, v in DotsSession.__EVENTS_DICT.items():
+        for k, v in _EVENTS_DICT.items():
             k1, k2 = k.lower().split("_")
             if k2 in ["fixation", "saccade", "blink"]:
                 event_dict[f"{k2}/{k1}"] = np.uint8(v)  # key changes from "L_Fixation" to "fixation/l"
             else:
                 event_dict[f"{k1}/{k2}"] = np.uint8(v)  # key changes from "block_on" to "block/on"
         event_dict.update({
-            f"stim/{val}": val for val in np.unique(dot_triggers) if val not in {0, DotsSession.__EVENTS_DICT['stim_off']}
+            f"stim/{val}": val for val in np.unique(dot_triggers)
+            if val not in {0, _EVENTS_DICT['stim_off']}
         })
         if not all(np.isin(np.unique(et_triggers[et_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in ET triggers")
         if not all(np.isin(np.unique(ses_triggers[ses_triggers != 0]), list(event_dict.values()))):
-            raise AssertionError("Unexpected event code in session triggers")
+            raise AssertionError("Unexpected event code in block triggers")
         if not all(np.isin(np.unique(dot_triggers[dot_triggers != 0]), list(event_dict.values()))):
             raise AssertionError("Unexpected event code in stim triggers")
 
@@ -121,10 +122,10 @@ class DotsSession(BaseSession):
         # create MNE RawArray object
         unit_conversion = pd.Series(info.get_channel_types()).map(
             dict(
-                eeg=1e-6, eog=1e-6,     # EEGEyeNet records uV but MNE requires eeg/eog channels in V
-                eyegaze=1, pupil=1,     # eye gaze in pixels; pupil in AU
-                misc=1,                 # ET timestamps in ms
-                stim=1,                 # triggers are in raw values
+                eeg=1e-6, eog=1e-6,  # EEGEyeNet records uV but MNE requires eeg/eog channels in V
+                eyegaze=1, pupil=1,  # eye gaze in pixels; pupil in AU
+                misc=1,  # ET timestamps in ms
+                stim=1,  # triggers are in raw values
             )
         )
         channels = np.multiply(
@@ -157,10 +158,10 @@ class DotsSession(BaseSession):
         NOTE: the origin in the bottom-left corner of the screen.
         """
         if 1 <= dot_number <= 27:
-            base_x, base_y = DotsSession.__DOT_LOCATIONS.get(dot_number, (None, None))
+            base_x, base_y = _DOT_LOCATIONS.get(dot_number, (None, None))
         elif 101 <= dot_number <= 127:
             # sometimes dots are marked with `101` instead of `1`
-            base_x, base_y = DotsSession.__DOT_LOCATIONS.get(dot_number - 100, (None, None))
+            base_x, base_y = _DOT_LOCATIONS.get(dot_number - 100, (None, None))
         else:
             raise KeyError(f"Invalid dot number: {dot_number}")
         if base_x is None or base_y is None:
@@ -171,17 +172,17 @@ class DotsSession(BaseSession):
     def _post_process_events(events: pd.DataFrame, ses_num: int) -> pd.DataFrame:
         # parse event types
         events['orig_type'] = events['type']
-        events['type'] = DotsSession.__parse_event_types(events['type'])
+        events['type'] = DotsBlock.__parse_event_types(events['type'])
 
         # extract block type: basic -> reversed -> mirrored -> reversed_mirrored -> basic2
-        events['block'] = DotsSession.__extract_block_type_event(events['type'])
+        events['block'] = DotsBlock.__extract_block_type_event(events['type'])
 
         # append dots metadata (coordinates, etc.)
-        events = DotsSession.__append_dots_metadata(events)
+        events = DotsBlock.__append_dots_metadata(events)
 
-        # assert that grid number in events matches session number from metadata
+        # assert that grid number in events matches block number from metadata
         _grid_num = int((events['type'][events['type'].map(
-            lambda val: str(val).startswith(DotsSession.__GRID_PREFIX_STR)
+            lambda val: str(val).startswith(_GRID_PREFIX_STR)
         )].iloc[0])[-1])
         if _grid_num != ses_num:
             raise AssertionError(f"Grid number in events ({_grid_num}) must match metadata ({ses_num})")
@@ -192,7 +193,7 @@ class DotsSession(BaseSession):
         event_type = event_type.map(lambda val: str(val).strip())
         event_type = event_type.map(lambda val: int(val) if val.isnumeric() else val)
         event_type = event_type.map(
-            lambda val: val-100 if isinstance(val, int) and 100 <= val < 200 else val   # convert 101-127 to 1-27
+            lambda val: val - 100 if isinstance(val, int) and 100 <= val < 200 else val  # convert 101-127 to 1-27
         )
         event_type = event_type.replace({41: "stim_off", 55: "block_on", 56: "block_off"})
 
@@ -205,8 +206,8 @@ class DotsSession(BaseSession):
         if is_gridnum_event.sum() > 1:
             raise ValueError("Multiple grid number events found before first `block_on` event")
         gridnum_idx = events_preceding_blocks[is_gridnum_event].index.min()
-        grid_number = int(event_type[gridnum_idx]) - 11     # grids 1-6 are labelled 12-17
-        event_type[gridnum_idx] = f"{DotsSession.__GRID_PREFIX_STR}{grid_number}"
+        grid_number = int(event_type[gridnum_idx]) - 11  # grids 1-6 are labelled 12-17
+        event_type[gridnum_idx] = f"{_GRID_PREFIX_STR}{grid_number}"
         return event_type
 
     @staticmethod
@@ -237,14 +238,14 @@ class DotsSession(BaseSession):
         :param events: the DataFrame containing the events data
         :returns: the DataFrame with the appended columns
         """
-        is_dot_event = ~np.isin(events['type'], list(DotsSession.__EVENTS_DICT.keys()))
+        is_dot_event = ~np.isin(events['type'], list(_EVENTS_DICT.keys()))
 
         # dot locations
         events.loc[is_dot_event, 'stim_x'] = events.loc[is_dot_event, 'type'].map(
-            lambda dot_id: DotsSession.get_dot_coordinates(dot_id)[0]
+            lambda dot_id: DotsBlock.get_dot_coordinates(dot_id)[0]
         )
         events.loc[is_dot_event, 'stim_y'] = events.loc[is_dot_event, 'type'].map(
-            lambda dot_id: DotsSession.get_dot_coordinates(dot_id)[1]
+            lambda dot_id: DotsBlock.get_dot_coordinates(dot_id)[1]
         )
 
         # relative to screen center
@@ -261,7 +262,7 @@ class DotsSession(BaseSession):
         center_angle[center_angle <= -180] += 360
         center_angle[center_angle > 180] -= 360
         events.loc[is_dot_event, 'center_angle_deg'] = center_angle
-        events.loc[events['center_distance_px'] == 0, 'center_angle_deg'] = 0   # correct angle for zero distance
+        events.loc[events['center_distance_px'] == 0, 'center_angle_deg'] = 0  # correct angle for zero distance
 
         # relative to previous dot (1st dot in each block should get `NaN`)
         for b in events['block'].unique():
@@ -298,7 +299,7 @@ class DotsSession(BaseSession):
         # replace the 'type' column with integer codes
         new_events = events_df.copy().sort_values('latency')
         new_events['type'] = new_events['type'].map(
-            lambda typ: typ if isinstance(typ, Number) else DotsSession.__EVENTS_DICT.get(typ, np.nan)
+            lambda typ: typ if isinstance(typ, Number) else _EVENTS_DICT.get(typ, np.nan)
         )
         is_nan = new_events['type'].isna().any()
         if is_nan:
@@ -315,30 +316,30 @@ class DotsSession(BaseSession):
         dot_triggers = np.zeros(n_samples, dtype=np.uint8)  # max 255 events (excluding 0)
         et_evnt_codes = [
             # ET events are encoded as 211-216
-            v for k, v in DotsSession.__EVENTS_DICT.items()
+            v for k, v in _EVENTS_DICT.items()
             if "fixation" in k.lower() or "saccade" in k.lower() or "blink" in k.lower()
         ]
-        session_evnt_codes = [
-            # Session events (block_on, block_off, etc.) are encoded as 55, 56, 201-205
-            v for k, v in DotsSession.__EVENTS_DICT.items()
-            if (v not in et_evnt_codes) and (k != "stim_off") and (v != 41)   # exclude stim_off (code 41)
+        block_evnt_codes = [
+            # Block events (block_on, block_off, etc.) are encoded as 55, 56, 201-205
+            v for k, v in _EVENTS_DICT.items()
+            if (v not in et_evnt_codes) and (k != "stim_off") and (v != 41)  # exclude stim_off (code 41)
         ]
         idxs = np.arange(n_samples)
         for evnt in new_events['type'].unique():
             is_evnt = new_events['type'] == evnt
             is_event_idx = np.any(
-                    (idxs >= new_events.loc[is_evnt, 'latency'].to_numpy()[:, None]) &
-                    (idxs <= new_events.loc[is_evnt, 'endtime'].to_numpy()[:, None]),
-                    axis=0
+                (idxs >= new_events.loc[is_evnt, 'latency'].to_numpy()[:, None]) &
+                (idxs <= new_events.loc[is_evnt, 'endtime'].to_numpy()[:, None]),
+                axis=0
             )
             # populate the correct trigger channel
             if evnt in et_evnt_codes:
                 et_triggers[is_event_idx] = np.uint8(evnt)
-            elif evnt in session_evnt_codes:
+            elif evnt in block_evnt_codes:
                 ses_triggers[is_event_idx] = np.uint8(evnt)
             else:
                 dot_triggers[is_event_idx] = np.uint8(evnt)
         return et_triggers, ses_triggers, dot_triggers
 
     def __repr__(self):
-        return f"{super().__repr__()}_{self.session_num}"
+        return f"{super().__repr__()}_{self.block_num}"
