@@ -12,7 +12,7 @@ from EEGEyeNet.DataModels.DotsSession import DotsSession
 
 _SUBJ_ID = "EP12"
 # _BASE_PATH = r'C:\Users\jonathanni\Desktop\EEGEyeNet\dots_data\synchronised_min'  # lab
-_BASE_PATH = r'C:\Users\nirjo\Desktop\SRP\data\EEGEyeNet\dots_data\sunchronised_min'  # home
+_BASE_PATH = r'C:\Users\nirjo\Desktop\SRP\data\EEGEyeNet\dots_data\synchronised_min'  # home
 _FILE_PATH = f'{_SUBJ_ID}\\{_SUBJ_ID}_DOTS3_EEG.mat'
 FULL_PATH = os.path.join(_BASE_PATH, _FILE_PATH)
 
