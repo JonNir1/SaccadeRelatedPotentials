@@ -77,7 +77,7 @@ class DotsBlock(BaseRecording):
         self._block_num = block_num
 
     @staticmethod
-    def from_mat_file(path: str) -> "DotsBlock":
+    def from_mat(path: str) -> "DotsBlock":
         data, timestamps, events, channel_locs, ref = DotsBlock._parse_mat_file(path)
 
         # extract metadata from path
@@ -373,7 +373,7 @@ class DotsSession:
         self._subject = blocks[0].subject
 
     @staticmethod
-    def from_mat_files(path: str, verbose: bool = False) -> "DotsSession":
+    def from_mat(path: str, verbose: bool = False) -> "DotsSession":
         """
         Load a DotsSession object from a directory containing .mat files.
         :param path: the path to the directory containing the .mat files
@@ -390,7 +390,7 @@ class DotsSession:
         ):
             mat_path = os.path.join(path, DotsSession.__MAT_FILE_FORMAT % (subj_id, i))
             try:
-                block = DotsBlock.from_mat_file(mat_path)
+                block = DotsBlock.from_mat(mat_path)
                 blocks.append(block)
             except FileNotFoundError:
                 print(f"\nFile not found: {mat_path}")

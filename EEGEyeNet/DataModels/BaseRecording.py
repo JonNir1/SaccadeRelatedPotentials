@@ -63,7 +63,7 @@ class BaseRecording(ABC):
 
     @staticmethod
     @abstractmethod
-    def from_mat_file(path: str) -> "BaseRecording":
+    def from_mat(path: str) -> "BaseRecording":
         # TODO: make this a Factory Method once other classes are implemented
         raise NotImplementedError
 
