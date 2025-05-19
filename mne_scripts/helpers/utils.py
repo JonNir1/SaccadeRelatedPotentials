@@ -41,7 +41,7 @@ def calculate_sampling_rate(milliseconds: np.ndarray, decimals: int = None) -> f
     if decimals is not None and decimals < 0:
         raise ValueError("decimals must be non-negative")
     ms_per_sec = 1000
-    sr = ms_per_sec / np.median(np.diff(milliseconds))
+    sr = ms_per_sec / np.mean(np.diff(milliseconds))
     if not np.isfinite(sr):
         raise RuntimeError("Error calculating sampling rate")
     if decimals is None:
